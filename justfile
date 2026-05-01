@@ -21,6 +21,12 @@ clean:
     rm -rf bin/
     go clean -cache -testcache
 
+# Tag and push a release (CI handles the rest)
+release tag:
+    git tag {{tag}}
+    git push origin {{tag}}
+    @echo "Release {{tag}} triggered — check Actions tab for progress"
+
 # ─── Test ─────────────────────────────────────────────────────────────────────
 
 # Run all tests

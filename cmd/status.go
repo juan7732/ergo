@@ -1,0 +1,109 @@
+package cmd
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	"juan7732/ergo/internal/config"
+	"juan7732/ergo/internal/tui"
+	"juan7732/ergo/internal/workspace"
+)
+
+var statusCmd = &cobra.Command{
+	Use:   "status [workspace-name]",
+	Short: "Show the state of all repos in a workspace",
+	Long: `Show branch, dirty state, and ahead/behind count for each repo.
+
+When run inside a standalone git repo (outside any ergo workspace), shows
+status for just that one repo.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runStatus,
+}
+
+func init() {
+	statusCmd.Flags().BoolP("short", "s", false, "One-line-per-repo output, no table borders (for scripting)")
+	rootCmd.AddCommand(statusCmd)
+}
+
+func runStatus(cmd *cobra.Command, args []string) error {
+	short, _ := cmd.Flags().GetBool("short")
+	out := cmd.OutOrStdout()
+
+	nameArg := ""
+	if len(args) > 0 {
+		nameArg = args[0]
+	}
+
+	// When no workspace name is given, check if we're in a standalone repo.
+	// If the user explicitly provides a name, skip detection and go straight
+	// to workspace resolution.
+	if nameArg == "" {
+		cwd, err := currentDir()
+		if err != nil {
+			return err
+		}
+		det, err := workspace.Detect(cwd, execRunner())
+		if err != nil {
+			return fmt.Errorf("detecting workspace: %w", err)
+		}
+
+		if det.IsStandaloneRepo {
+			name := filepath.Base(det.StandaloneRepoRoot)
+			entry := workspace.GatherSingleRepoStatus(det.StandaloneRepoRoot, name, "", execRunner())
+			if short {
+				fmt.Fprintln(out, tui.ShortRepoLine(entry))
+			} else {
+				fmt.Fprint(out, tui.RenderRepoTable([]workspace.RepoStatusEntry{entry}))
+			}
+			return nil
+		}
+	}
+
+	name, err := resolveWorkspaceName(cmd, nameArg)
+	if err != nil {
+		return err
+	}
+
+	globalCfg, err := config.LoadGlobal()
+	if err != nil {
+		return fmt.Errorf("loading global config: %w", err)
+	}
+
+	wsDir, err := workspaceDir(globalCfg, name)
+	if err != nil {
+		return err
+	}
+
+	wsCfg, err := config.LoadWorkspace(name)
+	if err != nil {
+		return fmt.Errorf("loading workspace config: %w", err)
+	}
+
+	if len(wsCfg.Repos) == 0 {
+		fmt.Fprintln(out, "no repos defined in workspace")
+		return nil
+	}
+
+	statuses, err := workspace.GatherStatus(
+		wsCfg,
+		wsDir,
+		execRunner(),
+		globalCfg.Parallel.Enabled,
+		globalCfg.Parallel.BatchSize,
+	)
+	if err != nil {
+		return fmt.Errorf("gathering status: %w", err)
+	}
+
+	if short {
+		for _, s := range statuses {
+			fmt.Fprintln(out, tui.ShortRepoLine(s))
+		}
+		return nil
+	}
+
+	fmt.Fprint(out, tui.RenderRepoTable(statuses))
+	return nil
+}
