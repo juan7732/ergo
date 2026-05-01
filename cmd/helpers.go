@@ -9,6 +9,16 @@ import (
 	"juan7732/ergo/internal/git"
 )
 
+// isTerminal reports whether stdin is an interactive terminal.
+// Used to decide whether to show interactive prompts.
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
 // currentDir returns the current working directory.
 func currentDir() (string, error) {
 	cwd, err := os.Getwd()
