@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -82,7 +83,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	border := func(left, cross, right string) string {
-		return left + repeat("─", wName+2) + cross + repeat("─", wRepos+2) + cross + repeat("─", wStatus+2) + right
+		return left + strings.Repeat("─", wName+2) + cross + strings.Repeat("─", wRepos+2) + cross + strings.Repeat("─", wStatus+2) + right
 	}
 
 	fmt.Fprintln(out, tui.StyleTableBorder.Render(border("┌", "┬", "┐")))
@@ -92,6 +93,10 @@ func runList(cmd *cobra.Command, _ []string) error {
 		wStatus, tui.StyleTableHeader.Render("Status"),
 	)
 	fmt.Fprintln(out, tui.StyleTableBorder.Render(border("├", "┼", "┤")))
+	// REVIEW: %-*s counts bytes, but lipgloss-styled strings embed invisible ANSI
+	// escape codes that inflate byte length without adding visible width. The Status
+	// column will visually misalign when ANSI is present. Fix in a follow-up by
+	// tracking visible width separately (e.g. via lipgloss.Width) and padding manually.
 	for _, r := range rows {
 		statusStr := r.status
 		if r.status == "synced" {
@@ -107,12 +112,4 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintln(out, tui.StyleTableBorder.Render(border("└", "┴", "┘")))
 	return nil
-}
-
-func repeat(ch string, n int) string {
-	out := ""
-	for i := 0; i < n; i++ {
-		out += ch
-	}
-	return out
 }
