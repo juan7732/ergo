@@ -149,17 +149,17 @@ func TestCurrentBranch_PropagatesError(t *testing.T) {
 }
 
 func TestRepoRoot_ReturnsOutput(t *testing.T) {
-    r := runnerFunc(func(dir, name string, args ...string) (string, error) {
-        return "/home/user/my-repo\n", nil
-    })
-    root, err := RepoRoot(r, "/home/user/my-repo/pkg")
-    require.NoError(t, err)
-    assert.Equal(t, "/home/user/my-repo", root)
+	r := runnerFunc(func(dir, name string, args ...string) (string, error) {
+		return "/home/user/my-repo\n", nil
+	})
+	root, err := RepoRoot(r, "/home/user/my-repo/pkg")
+	require.NoError(t, err)
+	assert.Equal(t, "/home/user/my-repo", root)
 }
 
 func TestRepoRoot_PropagatesError(t *testing.T) {
-    r := &captureRunner{err: errors.New("fatal: not a git repository")}
-    _, err := RepoRoot(r, "/tmp/not-a-repo")
-    require.Error(t, err)
-    assert.Contains(t, err.Error(), "finding git root in /tmp/not-a-repo")
+	r := &captureRunner{err: errors.New("fatal: not a git repository")}
+	_, err := RepoRoot(r, "/tmp/not-a-repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "finding git root in /tmp/not-a-repo")
 }

@@ -55,11 +55,11 @@ type VSCodeSection struct {
 // Branch is a pointer so we can detect when it was not specified and fall back
 // to GlobalConfig.Defaults.DefaultBranch.
 type Repo struct {
-	URL           string         `toml:"url"`
-	Name          *string        `toml:"name"`
-	Branch        *string        `toml:"branch"`
-	Tags          []string       `toml:"tags"`
-	Group         string         `toml:"group"`
+	URL            string         `toml:"url"`
+	Name           *string        `toml:"name"`
+	Branch         *string        `toml:"branch"`
+	Tags           []string       `toml:"tags"`
+	Group          string         `toml:"group"`
 	VSCodeSettings map[string]any `toml:"vscode_settings"`
 }
 
@@ -74,7 +74,7 @@ func (r *Repo) EffectiveName() string {
 
 // Folder represents a single [[folders]] entry.
 type Folder struct {
-	Name          string         `toml:"name"`
-	Git           bool           `toml:"git"`
+	Name           string         `toml:"name"`
+	Git            bool           `toml:"git"`
 	VSCodeSettings map[string]any `toml:"vscode_settings"`
 }

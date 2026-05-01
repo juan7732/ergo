@@ -26,7 +26,7 @@ func (f fakeRunner) Run(_, _ string, _ ...string) (string, error) {
 func writeCodeWorkspace(t *testing.T, dir, filename, wsName string) {
 	t.Helper()
 	data, err := json.Marshal(map[string]any{
-		"ergo": map[string]any{"workspace-name": wsName},
+		"ergo":    map[string]any{"workspace-name": wsName},
 		"folders": []any{},
 	})
 	require.NoError(t, err)
