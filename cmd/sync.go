@@ -36,6 +36,9 @@ Sync never deletes. Use --force to delete orphaned directories (with confirmatio
 func init() {
 	syncCmd.Flags().Bool("force", false, "Delete directories that are not in the TOML (requires confirmation)")
 	syncCmd.Flags().Bool("add", false, "Add repos/folders found on disk but not in TOML to the config (requires confirmation)")
+	syncCmd.Flags().String("name", "", "Filter repos by name (glob pattern, case-insensitive)")
+	syncCmd.Flags().String("group", "", "Filter repos to this group")
+	syncCmd.Flags().StringSlice("tags", nil, "Filter repos by tags, any-match (comma-separated or repeated flag)")
 	rootCmd.AddCommand(syncCmd)
 }
 
@@ -63,12 +66,22 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	out := cmd.OutOrStdout()
+
 	wsCfg, err := config.LoadWorkspace(name)
 	if err != nil {
 		return fmt.Errorf("loading workspace config: %w", err)
 	}
 
-	out := cmd.OutOrStdout()
+	// Apply filter flags to restrict which repos are synced.
+	filterOpts, err := filterOptsFromFlags(cmd, nil)
+	if err != nil {
+		return err
+	}
+	filteredRepos := workspace.ApplyRepoFilter(wsCfg.Repos, filterOpts)
+	syncCfg := wsCfg
+	syncCfg.Repos = filteredRepos
+
 	fmt.Fprintf(out, "syncing workspace %q → %s\n\n", name, wsDir)
 
 	opts := workspace.SyncOptions{
@@ -85,7 +98,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	result, err := workspace.Sync(wsCfg, opts, execRunner())
+	result, err := workspace.Sync(syncCfg, opts, execRunner())
 	if err != nil {
 		return fmt.Errorf("syncing workspace: %w", err)
 	}

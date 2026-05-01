@@ -24,6 +24,9 @@ status for just that one repo.`,
 
 func init() {
 	statusCmd.Flags().BoolP("short", "s", false, "One-line-per-repo output, no table borders (for scripting)")
+	statusCmd.Flags().String("name", "", "Filter repos by name (glob pattern, case-insensitive)")
+	statusCmd.Flags().String("group", "", "Filter repos to this group")
+	statusCmd.Flags().StringSlice("tags", nil, "Filter repos by tags, any-match (comma-separated or repeated flag)")
 	rootCmd.AddCommand(statusCmd)
 }
 
@@ -81,13 +84,22 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading workspace config: %w", err)
 	}
 
-	if len(wsCfg.Repos) == 0 {
-		fmt.Fprintln(out, "no repos defined in workspace")
+	// Apply filter flags to restrict which repos appear in the table.
+	filterOpts, err := filterOptsFromFlags(cmd, nil)
+	if err != nil {
+		return err
+	}
+	filteredRepos := workspace.ApplyRepoFilter(wsCfg.Repos, filterOpts)
+	statusCfg := wsCfg
+	statusCfg.Repos = filteredRepos
+
+	if len(statusCfg.Repos) == 0 {
+		fmt.Fprintln(out, "no repos matched the filter")
 		return nil
 	}
 
 	statuses, err := workspace.GatherStatus(
-		wsCfg,
+		statusCfg,
 		wsDir,
 		execRunner(),
 		globalCfg.Parallel.Enabled,
