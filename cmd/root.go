@@ -24,4 +24,6 @@ func Execute(v string) {
 func init() {
 	// Global flags (workspace-name flag added per-command as needed)
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+
+	rootCmd.AddCommand(updateCmd)
 }

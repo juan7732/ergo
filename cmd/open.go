@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -97,6 +98,21 @@ func runOpen(cmd *cobra.Command, args []string) error {
 		result, syncErr := workspace.Sync(wsCfg, opts, execRunner())
 		if syncErr != nil {
 			return fmt.Errorf("syncing workspace: %w", syncErr)
+		}
+
+		// Persist state cache for repos that were cloned.
+		state := workspace.WorkspaceState{
+			Workspace: name,
+			LastSync:  time.Now(),
+			Repos:     make(map[string]workspace.RepoStateEntry),
+		}
+		for _, rr := range result.Repos {
+			if rr.Action == workspace.RepoActionCloned || rr.Action == workspace.RepoActionPulled {
+				state.Repos[rr.Name] = workspace.RepoStateEntry{LastPulled: time.Now()}
+			}
+		}
+		if saveErr := workspace.SaveState(state); saveErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: saving state: %v\n", saveErr)
 		}
 
 		// Print folder results.
