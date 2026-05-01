@@ -189,22 +189,11 @@ func confirmAndDeleteOrphans(cmd *cobra.Command, wsDir string, orphans []string)
 func addOrphansToConfig(cmd *cobra.Command, wsName, wsDir string, wsCfg config.WorkspaceConfig, orphans []string) error {
 	out := cmd.OutOrStdout()
 
-	// Only orphans that are git repos can be reverse-synced as repos; the rest become folders.
 	if len(orphans) == 0 {
-		// Also look for dirs not in TOML that weren't already in orphans (shouldn't happen but be safe).
 		return nil
 	}
 
-	var toAdd []string
-	for _, o := range orphans {
-		toAdd = append(toAdd, o)
-	}
-
-	if len(toAdd) == 0 {
-		return nil
-	}
-
-	fmt.Fprintf(out, "\nadd %d director(ies) to TOML? [y/N] ", len(toAdd))
+	fmt.Fprintf(out, "\nadd %d director(ies) to TOML? [y/N] ", len(orphans))
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil {
@@ -216,7 +205,7 @@ func addOrphansToConfig(cmd *cobra.Command, wsName, wsDir string, wsCfg config.W
 	}
 
 	r := execRunner()
-	for _, name := range toAdd {
+	for _, name := range orphans {
 		dir := filepath.Join(wsDir, name)
 		// Check if it's a git repo by looking for a remote URL.
 		url, gitErr := r.Run(dir, "git", "remote", "get-url", "origin")

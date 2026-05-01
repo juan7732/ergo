@@ -68,6 +68,12 @@ func runOpen(cmd *cobra.Command, args []string) error {
 	}
 
 	// Workspace directory is missing or the .code-workspace file is stale.
+	// REVIEW: if the workspace dir exists but the TOML has new repos since last
+	// sync, isWorkspaceCurrent returns false (generated content differs), so we
+	// regenerate the .code-workspace but do NOT clone the new repos. The spec
+	// says open syncs when the directory is missing but is silent about the
+	// "dir exists, TOML changed" case. Current behavior — regenerate the file,
+	// leave cloning to 'ergo sync' — feels correct: open is for opening.
 	dirExists := dirExistsOnDisk(wsDir)
 	if !dirExists {
 		// First-time materialization: clone repos, create folders.
