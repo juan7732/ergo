@@ -115,3 +115,13 @@ func CurrentBranch(r Runner, dir string) (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
+
+// RepoRoot returns the absolute path of the git repository root containing dir.
+// Returns an error if dir is not inside a git repository.
+func RepoRoot(r Runner, dir string) (string, error) {
+	out, err := r.Run(dir, "git", "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("finding git root in %s: %w", dir, err)
+	}
+	return strings.TrimSpace(out), nil
+}
