@@ -55,6 +55,8 @@ Test behavior, not implementation. Tests live next to the code they test.
 **Concurrency:** `errgroup` for parallel ops, bounded by `[parallel].batch_size`.
 No shared mutable state without synchronization.
 
+**Go Quirks in VSCode** The Go extension doesn't auto-generate the package line on file creation, but does handle imports and formatting on save. Auto-save is enabled, so the package line appears automatically on `create_file`.
+
 ---
 
 ## TUI Conventions
