@@ -1,0 +1,26 @@
+# Build artifacts
+bin/
+dist/
+
+# Test and coverage
+coverage.out
+coverage.html
+*.test
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
