@@ -131,3 +131,20 @@ entirely by ergo — do not edit it by hand.
 `ergo show <group>` regenerates the workspace file to include only repos in a
 given group, focusing Copilot's context on the work at hand. `ergo show all`
 restores the full view.
+
+## Development
+
+Build, test, and lint via [`just`](https://github.com/casey/just):
+
+```bash
+just --list           # show all recipes
+just check            # fmt + vet + race-tested unit suite
+just test             # unit tests only
+just integration      # dockerized end-to-end suite
+just integration-shell  # interactive shell in the integration image
+```
+
+The integration suite builds a hermetic container image (Go + git only) and
+runs the real `ergo` binary against fixture repos served via `file://` URLs.
+The `gh` and `code` shell-outs are stubbed per-test on PATH. Requires Docker
+or a compatible runtime (OrbStack, Docker Desktop).

@@ -86,6 +86,35 @@ check: fmt vet test-race
 run *args:
     go run -ldflags "-X main.version={{version}}" . {{args}}
 
+# ─── Integration (Docker) ────────────────────────────────────────────────────
+
+# Image tag for the integration test image. Override with: just integration tag=foo
+integration_tag := "ergo-integration:latest"
+
+# Build the integration image and run the dockerized end-to-end suite.
+# Requires Docker (Docker Desktop, OrbStack, etc.).
+integration:
+    docker build -f test/integration/Dockerfile -t {{integration_tag}} .
+    docker run --rm \
+        -v "$PWD":/src \
+        {{integration_tag}}
+
+# Same as `integration` but with the race detector enabled.
+integration-race:
+    docker build -f test/integration/Dockerfile -t {{integration_tag}} .
+    docker run --rm \
+        -v "$PWD":/src \
+        {{integration_tag}} \
+        go test -tags=integration -race -count=1 ./test/integration/...
+
+# Open an interactive shell in the integration image for debugging.
+integration-shell:
+    docker build -f test/integration/Dockerfile -t {{integration_tag}} .
+    docker run --rm -it \
+        -v "$PWD":/src \
+        --entrypoint /bin/bash \
+        {{integration_tag}}
+
 # ─── Version ──────────────────────────────────────────────────────────────────
 
 # Git-derived version: tag if available, otherwise short SHA
