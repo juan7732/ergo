@@ -49,9 +49,9 @@ Notes:
 
 Flags:
 
-| Flag           | Purpose                                                                                                        |
-| -------------- | -------------------------------------------------------------------------------------------------------------- |
-| `--print-dir`  | Print the workspace directory to stdout and exit instead of launching VS Code. Materialization still happens. |
+| Flag          | Purpose                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `--print-dir` | Print the workspace directory to stdout and exit instead of launching VS Code. Materialization still happens. |
 
 `--print-dir` exists so a shell wrapper can `cd` into the workspace — a child
 process cannot change the parent shell's cwd. First-time clone progress is
@@ -172,9 +172,9 @@ Errors if `code` isn't on `$PATH`.
 
 Flags:
 
-| Flag             | Purpose                                                                  |
-| ---------------- | ------------------------------------------------------------------------ |
-| `--global`, `-g` | Open `~/.ergo/config.toml` instead of a workspace TOML. Rejects an arg.  |
+| Flag             | Purpose                                                                 |
+| ---------------- | ----------------------------------------------------------------------- |
+| `--global`, `-g` | Open `~/.ergo/config.toml` instead of a workspace TOML. Rejects an arg. |
 
 When `--global` is set, `LoadGlobal` runs first so the defaults file exists
 on disk before `code` opens it.

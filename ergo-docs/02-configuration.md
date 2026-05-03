@@ -78,14 +78,14 @@ git  = true                             # ergo will run `git init` on first sync
 
 ### `[[repos]]` field reference
 
-| Field             | Required | Type     | Default                     | Notes                                                  |
-| ----------------- | -------- | -------- | --------------------------- | ------------------------------------------------------ |
-| `url`             | yes      | string   | —                           | git clone URL                                          |
-| `name`            | no       | string   | `DeriveRepoName(url)`       | only needed to disambiguate collisions                 |
+| Field             | Required | Type     | Default                     | Notes                                                                                                                |
+| ----------------- | -------- | -------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `url`             | yes      | string   | —                           | git clone URL                                                                                                        |
+| `name`            | no       | string   | `DeriveRepoName(url)`       | only needed to disambiguate collisions                                                                               |
 | `branch`          | no       | string   | `[defaults].default_branch` | passed to `git clone --branch`; falls back to the remote default if the named branch doesn't exist (e.g. empty repo) |
-| `tags`            | no       | []string | `[]`                        | filter targets, any-match semantics                    |
-| `group`           | no       | string   | `""` (no group)             | one group per repo; used by `--group`, excluded_groups |
-| `vscode_settings` | no       | table    | `{}`                        | merged into folder entry in `.code-workspace`          |
+| `tags`            | no       | []string | `[]`                        | filter targets, any-match semantics                                                                                  |
+| `group`           | no       | string   | `""` (no group)             | one group per repo; used by `--group`, excluded_groups                                                               |
+| `vscode_settings` | no       | table    | `{}`                        | merged into folder entry in `.code-workspace`                                                                        |
 
 ### `[[folders]]` field reference
 

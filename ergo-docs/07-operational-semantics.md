@@ -93,17 +93,17 @@ Per the project Go conventions:
 
 ### Notable error categories
 
-| Failure                              | Behavior                                                                                                |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `git`/`gh`/`code` missing on PATH    | Error with install hint, immediate non-zero exit.                                                       |
-| Clone fails for one repo             | Recorded in `RepoResult.Err`, sync continues, summary error at end.                                     |
+| Failure                               | Behavior                                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `git`/`gh`/`code` missing on PATH     | Error with install hint, immediate non-zero exit.                                                       |
+| Clone fails for one repo              | Recorded in `RepoResult.Err`, sync continues, summary error at end.                                     |
 | Clone with `--branch` on empty remote | `git.Clone` removes the partial dest and retries without `--branch`; reported as `cloned` on success.   |
-| TOML parse error                     | Wrapped with file path, command exits.                                                                  |
-| Workspace TOML missing               | `LoadWorkspace` returns wrapped `os` error.                                                             |
-| Validation error                     | `ValidationErrors` printed line by line.                                                                |
-| `ergo run -- <cmd>` — non-zero exit  | Recorded in `RunResult.ExitCode`, run continues unless `--fail-fast`, summary error sets non-zero exit. |
-| `ergo run -- <cmd>` — binary missing | `RunResult.Err` (infrastructure failure).                                                               |
-| Update with no new release           | Friendly message "ergo is already up to date".                                                          |
+| TOML parse error                      | Wrapped with file path, command exits.                                                                  |
+| Workspace TOML missing                | `LoadWorkspace` returns wrapped `os` error.                                                             |
+| Validation error                      | `ValidationErrors` printed line by line.                                                                |
+| `ergo run -- <cmd>` — non-zero exit   | Recorded in `RunResult.ExitCode`, run continues unless `--fail-fast`, summary error sets non-zero exit. |
+| `ergo run -- <cmd>` — binary missing  | `RunResult.Err` (infrastructure failure).                                                               |
+| Update with no new release            | Friendly message "ergo is already up to date".                                                          |
 
 ## Exit codes
 

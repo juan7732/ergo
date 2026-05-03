@@ -47,21 +47,21 @@ ergo update
 
 ## Commands
 
-| Command                | Description                                          |
-| ---------------------- | ---------------------------------------------------- |
-| `ergo init [name]`     | Create a new workspace definition (guided TUI)       |
-| `ergo open [name]`     | Open workspace in VS Code; clones repos on first run |
-| `ergo sync [name]`     | Sync workspace on disk with TOML config              |
-| `ergo status [name]`   | Show branch/dirty/behind state for all repos         |
-| `ergo add [name]`      | Add a repo or folder to the workspace                |
-| `ergo remove [name]`   | Remove a repo or folder from the workspace           |
+| Command                | Description                                                               |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `ergo init [name]`     | Create a new workspace definition (guided TUI)                            |
+| `ergo open [name]`     | Open workspace in VS Code; clones repos on first run                      |
+| `ergo sync [name]`     | Sync workspace on disk with TOML config                                   |
+| `ergo status [name]`   | Show branch/dirty/behind state for all repos                              |
+| `ergo add [name]`      | Add a repo or folder to the workspace                                     |
+| `ergo remove [name]`   | Remove a repo or folder from the workspace                                |
 | `ergo edit [name]`     | Open the workspace TOML in VS Code (`--global` for `~/.ergo/config.toml`) |
-| `ergo list`            | List all configured workspaces                       |
-| `ergo show [group]`    | Filter VS Code view to a group/tag                   |
-| `ergo run -- <cmd>`    | Run a command across all (or filtered) repos         |
-| `ergo validate [name]` | Validate a workspace TOML                            |
-| `ergo update`          | Check for a new version and update the binary        |
-| `ergo --version`       | Print the current version                            |
+| `ergo list`            | List all configured workspaces                                            |
+| `ergo show [group]`    | Filter VS Code view to a group/tag                                        |
+| `ergo run -- <cmd>`    | Run a command across all (or filtered) repos                              |
+| `ergo validate [name]` | Validate a workspace TOML                                                 |
+| `ergo update`          | Check for a new version and update the binary                             |
+| `ergo --version`       | Print the current version                                                 |
 
 ## Configuration
 
