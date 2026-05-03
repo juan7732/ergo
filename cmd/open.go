@@ -15,6 +15,10 @@ import (
 	"github.com/juan7732/ergo/internal/workspace"
 )
 
+var (
+	openPrintDir bool
+)
+
 var openCmd = &cobra.Command{
 	Use:   "open [workspace-name]",
 	Short: "Open a workspace in VS Code",
@@ -25,12 +29,20 @@ file, then launches VS Code.
 
 Subsequent use: regenerates .code-workspace only if the content has changed
 (smart regeneration), then launches VS Code. Does not re-clone or pull — use
-'ergo sync' for that.`,
+'ergo sync' for that.
+
+Use --print-dir to print the workspace directory to stdout instead of launching
+VS Code. This is intended for shell wrappers that want to cd into the workspace,
+since a child process cannot change the parent shell's working directory. For
+example, add the following to your shell rc:
+
+    ergocd() { cd "$(ergo open --print-dir "$@")"; }`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runOpen,
 }
 
 func init() {
+	openCmd.Flags().BoolVar(&openPrintDir, "print-dir", false, "print the workspace directory to stdout instead of launching VS Code")
 	rootCmd.AddCommand(openCmd)
 }
 
@@ -64,6 +76,10 @@ func runOpen(cmd *cobra.Command, args []string) error {
 
 	// Check for the fast path: workspace dir exists and .code-workspace is current.
 	if isWorkspaceCurrent(wsDir, wsFilePath, wsCfg) {
+		if openPrintDir {
+			fmt.Fprintln(cmd.OutOrStdout(), wsDir)
+			return nil
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "opening %s\n", wsFilePath)
 		return launchVSCode(wsFilePath)
 	}
@@ -78,7 +94,12 @@ func runOpen(cmd *cobra.Command, args []string) error {
 	dirExists := dirExistsOnDisk(wsDir)
 	if !dirExists {
 		// First-time materialization: clone repos, create folders.
+		// When --print-dir is set, route progress to stderr so stdout stays
+		// clean for shell capture: cd "$(ergo open --print-dir foo)".
 		out := cmd.OutOrStdout()
+		if openPrintDir {
+			out = cmd.ErrOrStderr()
+		}
 		fmt.Fprintf(out, "creating workspace %q → %s\n\n", name, wsDir)
 
 		opts := workspace.SyncOptions{
@@ -133,6 +154,11 @@ func runOpen(cmd *cobra.Command, args []string) error {
 	}
 	if _, err := vscode.WriteIfChanged(wsFilePath, wsBytes); err != nil {
 		return fmt.Errorf("writing .code-workspace: %w", err)
+	}
+
+	if openPrintDir {
+		fmt.Fprintln(cmd.OutOrStdout(), wsDir)
+		return nil
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "opening %s\n", wsFilePath)

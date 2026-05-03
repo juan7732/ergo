@@ -141,3 +141,33 @@ name = "ws"
 	require.Len(t, invs, 1)
 	assert.Equal(t, h.WorkspaceTOMLPath("ws"), invs[0][0])
 }
+
+func TestEdit_GlobalFlagOpensGlobalConfig(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	h.InstallCodeStub()
+
+	h.WriteGlobalConfig(`
+[defaults]
+workspace_root = "~/ergo-workspaces"
+default_branch = "main"
+`)
+
+	res := h.Run("edit", "--global")
+	res.AssertOK(t)
+
+	invs := h.CodeInvocations()
+	require.Len(t, invs, 1)
+	expectedPath := filepath.Join(h.Home, ".ergo", "config.toml")
+	assert.Equal(t, expectedPath, invs[0][0])
+}
+
+func TestEdit_GlobalFlagRejectsWorkspaceArg(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	h.InstallCodeStub()
+
+	res := h.Run("edit", "--global", "ws")
+	res.AssertFail(t)
+	assert.Contains(t, res.Stderr, "--global does not take a workspace name")
+}
