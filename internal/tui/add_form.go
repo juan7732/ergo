@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/config"
 )
 
 type addFormStep int

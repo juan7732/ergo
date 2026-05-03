@@ -16,7 +16,7 @@ file is the single source of truth.
 ## Install
 
 ```bash
-go install juan7732/ergo@latest
+go install github.com/juan7732/ergo@latest
 ```
 
 Or download the binary from [Releases](https://github.com/juan7732/ergo/releases) and

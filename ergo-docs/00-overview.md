@@ -21,7 +21,7 @@ that workspace consistent.
 
 | Property                      | Value                                                              |
 | ----------------------------- | ------------------------------------------------------------------ |
-| Language                      | Go (module `juan7732/ergo`, go `1.26.1`)                           |
+| Language                      | Go (module `github.com/juan7732/ergo`, go `1.26.1`)                |
 | CLI framework                 | `spf13/cobra`                                                      |
 | TUI framework                 | `charmbracelet/bubbletea` + `bubbles` + `lipgloss`                 |
 | TOML parser                   | `BurntSushi/toml`                                                  |

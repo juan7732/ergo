@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"juan7732/ergo/test/integration/harness"
+	"github.com/juan7732/ergo/test/integration/harness"
 )
 
 // TestVersion_PrintsLDFlagValue ensures the binary was built with the expected

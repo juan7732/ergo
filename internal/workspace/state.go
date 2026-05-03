@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/config"
 )
 
 // RepoStateEntry holds cached state for a single repo.

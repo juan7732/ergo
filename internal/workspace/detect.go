@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"juan7732/ergo/internal/config"
-	"juan7732/ergo/internal/git"
+	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/git"
 )
 
 // Detection describes the ergo context inferred from the working directory.

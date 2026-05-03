@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"juan7732/ergo/test/integration/harness"
+	"github.com/juan7732/ergo/test/integration/harness"
 )
 
 // seedMaterializedWorkspace writes a TOML containing one fixture repo and runs

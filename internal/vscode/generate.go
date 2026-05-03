@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/config"
 )
 
 // Filter holds the active view filter recorded in the "ergo" object of a

@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"juan7732/ergo/internal/workspace"
+	"github.com/juan7732/ergo/internal/workspace"
 )
 
 // PrintRunResult writes the formatted output of a single run result to w.

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/config"
 )
 
 func ptr(s string) *string { return &s }

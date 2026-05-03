@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"juan7732/ergo/internal/config"
-	"juan7732/ergo/internal/tui"
+	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/tui"
 )
 
 var removeCmd = &cobra.Command{

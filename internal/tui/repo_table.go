@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"juan7732/ergo/internal/workspace"
+	"github.com/juan7732/ergo/internal/workspace"
 )
 
 // RenderRepoTable renders a bordered table of repo statuses using Unicode
