@@ -42,16 +42,16 @@ empty) into the error message.
 
 Public functions:
 
-| Function                      | Underlying command                                                                          |
-| ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `CheckPath()`                 | `exec.LookPath("git")`                                                                      |
-| `Clone(r, url, dest, branch)` | `git clone [--branch <b>] <url> <dest>` (retries without `--branch` if the remote lacks it) |
+| Function                      | Underlying command                                                                             |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `CheckPath()`                 | `exec.LookPath("git")`                                                                         |
+| `Clone(r, url, dest, branch)` | `git clone [--branch <b>] <url> <dest>` (retries without `--branch` if the remote lacks it)    |
 | `Pull(r, dir)`                | `git pull --ff-only` (refuses non-FF merges; returns `ErrEmptyRemote` if upstream ref missing) |
-| `Init(r, dir)`                | `git init`                                                                                  |
-| `Status(r, dir)`              | `git status --porcelain` → bool dirty                                                       |
-| `BehindCount(r, dir)`         | `git rev-list --count HEAD..@{u}` → int                                                     |
-| `CurrentBranch(r, dir)`       | `git rev-parse --abbrev-ref HEAD`                                                           |
-| `RepoRoot(r, dir)`            | `git rev-parse --show-toplevel` (used by detection)                                         |
+| `Init(r, dir)`                | `git init`                                                                                     |
+| `Status(r, dir)`              | `git status --porcelain` → bool dirty                                                          |
+| `BehindCount(r, dir)`         | `git rev-list --count HEAD..@{u}` → int                                                        |
+| `CurrentBranch(r, dir)`       | `git rev-parse --abbrev-ref HEAD`                                                              |
+| `RepoRoot(r, dir)`            | `git rev-parse --show-toplevel` (used by detection)                                            |
 
 `Pull` uses `--ff-only` deliberately — sync should never create merge commits.
 

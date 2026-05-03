@@ -11,6 +11,7 @@ var rootCmd = &cobra.Command{
 	Short: "Multi-repo VS Code workspace manager",
 	Long:  `ergo manages multi-repo development workspaces. It clones repos, organizes them into a working directory, generates VS Code workspace files, and provides commands to operate across all repos simultaneously.`,
 	// No Run: ergo with no subcommand prints help
+	SilenceUsage: true,
 }
 
 // Execute adds all child commands to the root command and sets flags.
