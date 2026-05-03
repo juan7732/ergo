@@ -44,7 +44,22 @@ Notes:
 - When `wsDir` exists but the TOML changed since last sync, `open` regenerates
   the `.code-workspace` but does **not** re-clone — that is `sync`'s job
   (`// REVIEW:` comment in source acknowledges spec is silent on this case).
-- Aborts with a friendly message if `code` is not on `$PATH`.
+- Aborts with a friendly message if `code` is not on `$PATH` (unless
+  `--print-dir` is set, in which case `code` is never invoked).
+
+Flags:
+
+| Flag           | Purpose                                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `--print-dir`  | Print the workspace directory to stdout and exit instead of launching VS Code. Materialization still happens. |
+
+`--print-dir` exists so a shell wrapper can `cd` into the workspace — a child
+process cannot change the parent shell's cwd. First-time clone progress is
+routed to stderr in this mode so stdout stays clean for command substitution:
+
+```sh
+ergocd() { cd "$(ergo open --print-dir "$@")"; }
+```
 
 ---
 
@@ -154,6 +169,15 @@ File: [`cmd/edit.go`](../../ergo/cmd/edit.go)
 
 Resolves the workspace and `exec`s `code ~/.ergo/workspaces/<name>.toml`.
 Errors if `code` isn't on `$PATH`.
+
+Flags:
+
+| Flag             | Purpose                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| `--global`, `-g` | Open `~/.ergo/config.toml` instead of a workspace TOML. Rejects an arg.  |
+
+When `--global` is set, `LoadGlobal` runs first so the defaults file exists
+on disk before `code` opens it.
 
 ---
 

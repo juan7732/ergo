@@ -45,7 +45,7 @@ Public functions:
 | Function                      | Underlying command                                  |
 | ----------------------------- | --------------------------------------------------- |
 | `CheckPath()`                 | `exec.LookPath("git")`                              |
-| `Clone(r, url, dest, branch)` | `git clone [--branch <b>] <url> <dest>`             |
+| `Clone(r, url, dest, branch)` | `git clone [--branch <b>] <url> <dest>` (retries without `--branch` if the remote lacks it) |
 | `Pull(r, dir)`                | `git pull --ff-only` (refuses non-FF merges)        |
 | `Init(r, dir)`                | `git init`                                          |
 | `Status(r, dir)`              | `git status --porcelain` → bool dirty               |
@@ -54,6 +54,14 @@ Public functions:
 | `RepoRoot(r, dir)`            | `git rev-parse --show-toplevel` (used by detection) |
 
 `Pull` uses `--ff-only` deliberately — sync should never create merge commits.
+
+`Clone` has a single fallback: when called with a non-empty `branch` and git
+fails with "Remote branch ... not found in upstream origin" (typical for a
+freshly-created empty repo, or when the TOML pins a branch that doesn't exist
+on the remote), `Clone` removes the partial destination directory and retries
+without `--branch`. The retry uses the remote's default branch, or — for an
+empty repo — produces a working tree with no checkout, ready for a first push.
+Any other clone failure (auth, repo not found, network) propagates immediately.
 
 ---
 

@@ -55,7 +55,7 @@ ergo update
 | `ergo status [name]`   | Show branch/dirty/behind state for all repos         |
 | `ergo add [name]`      | Add a repo or folder to the workspace                |
 | `ergo remove [name]`   | Remove a repo or folder from the workspace           |
-| `ergo edit [name]`     | Open the workspace TOML in VS Code                   |
+| `ergo edit [name]`     | Open the workspace TOML in VS Code (`--global` for `~/.ergo/config.toml`) |
 | `ergo list`            | List all configured workspaces                       |
 | `ergo show [group]`    | Filter VS Code view to a group/tag                   |
 | `ergo run -- <cmd>`    | Run a command across all (or filtered) repos         |
@@ -131,6 +131,19 @@ entirely by ergo — do not edit it by hand.
 `ergo show <group>` regenerates the workspace file to include only repos in a
 given group, focusing Copilot's context on the work at hand. `ergo show all`
 restores the full view.
+
+## Shell `cd` integration
+
+`ergo open --print-dir <name>` prints the workspace directory to stdout instead
+of launching VS Code. A child process cannot change the parent shell's cwd, so
+wrap it in a function in your shell rc to `cd` after opening:
+
+```sh
+ergocd() { cd "$(ergo open --print-dir "$@")"; }
+```
+
+First-time clone progress is routed to stderr in this mode so stdout stays
+clean for command substitution.
 
 ## Development
 
