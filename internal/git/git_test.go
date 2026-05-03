@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,6 +51,65 @@ func TestClone_PropagatesError(t *testing.T) {
 	r := &captureRunner{err: errors.New("permission denied")}
 	err := Clone(r, "https://github.com/example/repo.git", "/tmp/repo", "main")
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cloning https://github.com/example/repo.git")
+}
+
+// multiCallRunner records each Run call and returns scripted responses.
+type multiCallRunner struct {
+	calls   [][]string
+	dirs    []string
+	outs    []string
+	errs    []error
+	callIdx int
+}
+
+func (m *multiCallRunner) Run(dir, name string, args ...string) (string, error) {
+	m.calls = append(m.calls, append([]string{name}, args...))
+	m.dirs = append(m.dirs, dir)
+	i := m.callIdx
+	m.callIdx++
+	var out string
+	var err error
+	if i < len(m.outs) {
+		out = m.outs[i]
+	}
+	if i < len(m.errs) {
+		err = m.errs[i]
+	}
+	return out, err
+}
+
+func TestClone_RetriesWithoutBranchWhenRemoteBranchMissing(t *testing.T) {
+	dest := t.TempDir() + "/repo"
+	// Simulate git's behavior of creating the dest directory before failing.
+	require.NoError(t, os.MkdirAll(dest, 0o700))
+
+	r := &multiCallRunner{
+		errs: []error{
+			errors.New("fatal: Remote branch main not found in upstream origin: exit status 128"),
+			nil,
+		},
+	}
+	err := Clone(r, "https://github.com/example/repo.git", dest, "main")
+	require.NoError(t, err)
+	require.Len(t, r.calls, 2)
+	assert.Equal(t, []string{"git", "clone", "--branch", "main", "https://github.com/example/repo.git", dest}, r.calls[0])
+	assert.Equal(t, []string{"git", "clone", "https://github.com/example/repo.git", dest}, r.calls[1])
+
+	// The partial destination directory should have been removed before retry.
+	// (It is recreated by the retry in real git, but our fake runner does not,
+	// so the dir should not exist now.)
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "expected dest dir to be cleaned up, got %v", statErr)
+}
+
+func TestClone_DoesNotRetryOnUnrelatedError(t *testing.T) {
+	r := &multiCallRunner{
+		errs: []error{errors.New("fatal: repository not found")},
+	}
+	err := Clone(r, "https://github.com/example/repo.git", "/tmp/repo", "main")
+	require.Error(t, err)
+	assert.Len(t, r.calls, 1)
 	assert.Contains(t, err.Error(), "cloning https://github.com/example/repo.git")
 }
 

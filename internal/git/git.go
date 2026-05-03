@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -49,6 +50,11 @@ func CheckPath() error {
 
 // Clone clones repoURL into destDir. If branch is non-empty, the given branch
 // is checked out; otherwise git uses the remote's default branch.
+//
+// When --branch is requested but the remote does not have that branch (e.g. an
+// empty repo with no commits yet, or a repo whose default branch differs from
+// the configured one), Clone removes the partial destination and retries
+// without --branch so the clone falls back to the remote's default.
 func Clone(r Runner, repoURL, destDir, branch string) error {
 	args := []string{"clone"}
 	if branch != "" {
@@ -56,10 +62,35 @@ func Clone(r Runner, repoURL, destDir, branch string) error {
 	}
 	args = append(args, repoURL, destDir)
 
-	if _, err := r.Run("", "git", args...); err != nil {
-		return fmt.Errorf("cloning %s: %w", repoURL, err)
+	_, err := r.Run("", "git", args...)
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	// Retry without --branch when the remote lacks the requested branch.
+	// This is common for newly-created empty repos that have no branches yet.
+	if branch != "" && isRemoteBranchMissing(err) {
+		if rmErr := os.RemoveAll(destDir); rmErr != nil {
+			return fmt.Errorf("cleaning up after failed clone of %s: %w", repoURL, rmErr)
+		}
+		retryArgs := []string{"clone", repoURL, destDir}
+		if _, retryErr := r.Run("", "git", retryArgs...); retryErr != nil {
+			return fmt.Errorf("cloning %s (retry without --branch): %w", repoURL, retryErr)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("cloning %s: %w", repoURL, err)
+}
+
+// isRemoteBranchMissing reports whether err looks like git's "Remote branch X
+// not found in upstream origin" failure from `git clone --branch`.
+func isRemoteBranchMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "remote branch") && strings.Contains(msg, "not found")
 }
 
 // Pull fetches and fast-forward pulls the current branch in dir.
