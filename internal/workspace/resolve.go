@@ -6,8 +6,8 @@ import (
 
 	"github.com/gobwas/glob"
 
-	"juan7732/ergo/internal/config"
-	"juan7732/ergo/internal/git"
+	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/git"
 )
 
 // ResolveResult holds the outcome of workspace resolution.

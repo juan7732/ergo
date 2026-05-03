@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"juan7732/ergo/internal/config"
-	"juan7732/ergo/internal/git"
-	"juan7732/ergo/internal/workspace"
+	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/git"
+	"github.com/juan7732/ergo/internal/workspace"
 )
 
 // isTerminal reports whether stdin is an interactive terminal.

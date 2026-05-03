@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"juan7732/ergo/internal/config"
-	"juan7732/ergo/internal/git"
+	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/git"
 )
 
 // RepoAction describes what Sync did with a single repo.

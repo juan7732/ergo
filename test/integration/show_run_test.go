@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"juan7732/ergo/test/integration/harness"
+	"github.com/juan7732/ergo/test/integration/harness"
 )
 
 // seedRunWorkspace creates a 3-repo workspace with groups + tags useful for

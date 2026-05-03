@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"juan7732/ergo/test/integration/harness"
+	"github.com/juan7732/ergo/test/integration/harness"
 )
 
 // TestUpdate_AtomicReplace stubs `gh` to serve a newer release and asserts that

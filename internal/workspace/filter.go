@@ -5,7 +5,7 @@ import (
 
 	"github.com/gobwas/glob"
 
-	"juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/config"
 )
 
 // FilterOptions specifies which repos to include after applying filters.

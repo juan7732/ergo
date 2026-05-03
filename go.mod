@@ -1,4 +1,4 @@
-module juan7732/ergo
+module github.com/juan7732/ergo
 
 go 1.26.1
 

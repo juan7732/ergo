@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"juan7732/ergo/internal/github"
+	"github.com/juan7732/ergo/internal/github"
 )
 
 var updateCmd = &cobra.Command{

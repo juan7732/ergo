@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"juan7732/ergo/test/integration/harness"
+	"github.com/juan7732/ergo/test/integration/harness"
 )
 
 // TestStatus_CleanDirtyBehindUncloned exercises the four status states.

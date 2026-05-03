@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"juan7732/ergo/internal/config"
-	"juan7732/ergo/internal/vscode"
-	"juan7732/ergo/internal/workspace"
+	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/vscode"
+	"github.com/juan7732/ergo/internal/workspace"
 )
 
 var syncCmd = &cobra.Command{
