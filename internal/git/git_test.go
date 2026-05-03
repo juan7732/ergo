@@ -129,6 +129,21 @@ func TestPull_PropagatesError(t *testing.T) {
 	assert.Contains(t, err.Error(), "pulling in /tmp/repo")
 }
 
+func TestPull_ReturnsErrEmptyRemoteWhenUpstreamRefMissing(t *testing.T) {
+	r := &captureRunner{err: errors.New("Your configuration specifies to merge with the ref 'refs/heads/main' from the remote, but no such ref was fetched.: exit status 1")}
+	err := Pull(r, "/tmp/repo")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrEmptyRemote), "expected ErrEmptyRemote, got %v", err)
+	assert.Contains(t, err.Error(), "pulling in /tmp/repo")
+}
+
+func TestPull_ReturnsErrEmptyRemoteWhenRemoteRefNotFound(t *testing.T) {
+	r := &captureRunner{err: errors.New("fatal: couldn't find remote ref refs/heads/main")}
+	err := Pull(r, "/tmp/repo")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrEmptyRemote), "expected ErrEmptyRemote, got %v", err)
+}
+
 func TestInit_CallsGitInit(t *testing.T) {
 	r := &captureRunner{}
 	err := Init(r, "/tmp/folder")

@@ -2,12 +2,19 @@ package git
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 )
+
+// ErrEmptyRemote is returned by Pull when the remote has no commits / no
+// matching upstream ref (typical for freshly-created GitHub repos that have
+// not received their first push yet). Callers should treat this as a no-op
+// rather than a failure.
+var ErrEmptyRemote = errors.New("remote is empty or missing upstream ref")
 
 // Runner executes a shell command in a given directory and returns trimmed stdout.
 // The thin interface exists solely to enable test fakes without spawning real git
@@ -94,11 +101,30 @@ func isRemoteBranchMissing(err error) bool {
 }
 
 // Pull fetches and fast-forward pulls the current branch in dir.
+//
+// Returns ErrEmptyRemote (wrapped) when git fails because the configured
+// upstream ref does not exist on the remote — typical for freshly-created
+// repos that have no commits yet. Callers should treat this as a no-op.
 func Pull(r Runner, dir string) error {
 	if _, err := r.Run(dir, "git", "pull", "--ff-only"); err != nil {
+		if isMissingUpstreamRef(err) {
+			return fmt.Errorf("pulling in %s: %w", dir, ErrEmptyRemote)
+		}
 		return fmt.Errorf("pulling in %s: %w", dir, err)
 	}
 	return nil
+}
+
+// isMissingUpstreamRef reports whether err looks like git's "no such ref was
+// fetched" failure from `git pull` against an empty remote (the local branch
+// is configured to merge with refs/heads/<X>, but the remote has no <X>).
+func isMissingUpstreamRef(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no such ref was fetched") ||
+		(strings.Contains(msg, "couldn't find remote ref") && strings.Contains(msg, "refs/heads/"))
 }
 
 // Init runs git init in dir.

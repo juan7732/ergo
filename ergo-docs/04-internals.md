@@ -46,7 +46,7 @@ Public functions:
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
 | `CheckPath()`                 | `exec.LookPath("git")`                                                                      |
 | `Clone(r, url, dest, branch)` | `git clone [--branch <b>] <url> <dest>` (retries without `--branch` if the remote lacks it) |
-| `Pull(r, dir)`                | `git pull --ff-only` (refuses non-FF merges)                                                |
+| `Pull(r, dir)`                | `git pull --ff-only` (refuses non-FF merges; returns `ErrEmptyRemote` if upstream ref missing) |
 | `Init(r, dir)`                | `git init`                                                                                  |
 | `Status(r, dir)`              | `git status --porcelain` → bool dirty                                                       |
 | `BehindCount(r, dir)`         | `git rev-list --count HEAD..@{u}` → int                                                     |
@@ -62,6 +62,13 @@ on the remote), `Clone` removes the partial destination directory and retries
 without `--branch`. The retry uses the remote's default branch, or — for an
 empty repo — produces a working tree with no checkout, ready for a first push.
 Any other clone failure (auth, repo not found, network) propagates immediately.
+
+`Pull` has a complementary fallback: when git reports "no such ref was
+fetched" or "couldn't find remote ref refs/heads/…" — the same empty-repo
+scenario after `Clone` has already returned — it returns the sentinel
+`ErrEmptyRemote` (wrapped). `workspace.syncRepo` checks for it via
+`errors.Is` and reports the repo as `skipped` instead of `failed`, so an
+empty repo round-trips through `ergo sync` cleanly until the first push.
 
 ---
 

@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -203,6 +204,11 @@ func syncRepo(repo config.Repo, opts SyncOptions, r git.Runner) RepoResult {
 	}
 
 	if pullErr := git.Pull(r, dir); pullErr != nil {
+		// Empty remote (no commits yet) is not a sync failure — there is
+		// nothing to pull. Report as skipped so the user sees the no-op.
+		if errors.Is(pullErr, git.ErrEmptyRemote) {
+			return RepoResult{Name: name, Action: RepoActionSkipped}
+		}
 		return RepoResult{Name: name, Action: RepoActionFailed, Err: pullErr}
 	}
 	return RepoResult{Name: name, Action: RepoActionPulled}
