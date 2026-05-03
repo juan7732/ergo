@@ -22,17 +22,18 @@ func TestUpdate_AtomicReplace(t *testing.T) {
 	t.Parallel()
 	h := harness.New(t)
 
-	// Stage: write a fake "ergo" binary at a writable location, override
-	// $ERGO_TEST_BINARY for this test to point at it. The harness Run() method
-	// reads the env var via ErgoBinary().
+	// Stage: write a fake "ergo" binary at a writable location and point the
+	// harness at it for this test only. Since `ergo update` does
+	// os.Executable() + atomic rename, the swap targets this staged path
+	// rather than the shared integration binary.
 	stagingBin := filepath.Join(h.Home, "bin", "ergo")
 	require.NoError(t, os.MkdirAll(filepath.Dir(stagingBin), 0o755))
 
 	// Copy the real (integration-built) binary so `--version` / update logic works.
-	src, err := os.ReadFile("/usr/local/bin/ergo")
+	src, err := os.ReadFile(harness.ErgoBinary())
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(stagingBin, src, 0o755))
-	h.SetEnv("ERGO_TEST_BINARY", stagingBin)
+	h.Binary = stagingBin
 
 	// Stub gh to advertise a newer release and serve a placeholder asset.
 	// Use a tag that won't match the embedded "integration" version so update proceeds.

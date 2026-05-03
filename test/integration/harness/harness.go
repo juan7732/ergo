@@ -39,6 +39,7 @@ type Harness struct {
 	t       *testing.T
 	Home    string   // value of $HOME for this test (also $ERGO_HOME parent)
 	PathDir string   // writable dir prepended to PATH for stub binaries
+	Binary  string   // path to the ergo binary the harness will exec (per-test override)
 	Env     []string // env passed to ergo invocations (HOME, PATH, plus extras)
 }
 
@@ -57,6 +58,7 @@ func New(t *testing.T) *Harness {
 		t:       t,
 		Home:    home,
 		PathDir: pathDir,
+		Binary:  ErgoBinary(),
 	}
 	h.Env = h.baseEnv()
 	return h
@@ -134,7 +136,7 @@ func (h *Harness) RunWith(opts RunOpts, args ...string) Result {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, ErgoBinary(), args...)
+	cmd := exec.CommandContext(ctx, h.Binary, args...)
 	cmd.Env = append([]string{}, h.Env...)
 	cmd.Dir = opts.Cwd
 
