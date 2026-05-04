@@ -50,4 +50,4 @@ RUN chmod 0755 /usr/local/bin/ergo
 # integration package against the workspace it lives in.
 WORKDIR /src
 
-CMD ["go", "test", "-tags=integration", "-count=1", "./test/integration/..."]
+CMD ["go", "test", "-tags=integration", "-v", "-count=1", "./test/integration"]

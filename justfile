@@ -93,11 +93,14 @@ integration_tag := "ergo-integration:latest"
 
 # Build the integration image and run the dockerized end-to-end suite.
 # Requires Docker (Docker Desktop, OrbStack, etc.).
+# Uses -v so individual test names are visible — the suite runs in parallel
+# and finishes in <1s, which otherwise looks like nothing ran.
 integration:
     docker build -f test/integration/Dockerfile -t {{integration_tag}} .
     docker run --rm \
         -v "$PWD":/src \
-        {{integration_tag}}
+        {{integration_tag}} \
+        go test -tags=integration -v -count=1 ./test/integration
 
 # Same as `integration` but with the race detector enabled.
 integration-race:
@@ -105,7 +108,7 @@ integration-race:
     docker run --rm \
         -v "$PWD":/src \
         {{integration_tag}} \
-        go test -tags=integration -race -count=1 ./test/integration/...
+        go test -tags=integration -race -v -count=1 ./test/integration
 
 # Open an interactive shell in the integration image for debugging.
 integration-shell:
