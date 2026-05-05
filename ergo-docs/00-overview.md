@@ -66,7 +66,7 @@ ergo/
 
 The companion plan and specification live one folder up:
 
-- [token-maximizer/tenets.md](../../token-maximizer/tenets.md) — design philosophy.
+- [tenets.md](./tenets.md) — design philosophy.
 
 ## Document Index
 
