@@ -66,7 +66,7 @@ ergo/
 
 The companion plan and specification live one folder up:
 
-- [tenets.md](./tenets.md) — design philosophy.
+- [tenets.md](./09-design-tenets.md) — design philosophy.
 
 ## Document Index
 
