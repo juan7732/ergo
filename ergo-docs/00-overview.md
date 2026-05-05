@@ -66,9 +66,7 @@ ergo/
 
 The companion plan and specification live one folder up:
 
-- [token-maximizer/ergo-spec.md](../../token-maximizer/ergo-spec.md) — behavioral spec v2.0.
 - [token-maximizer/tenets.md](../../token-maximizer/tenets.md) — design philosophy.
-- [scratch/ergo-implementation-plan.md](../ergo-implementation-plan.md) — phased build plan (10 phases).
 
 ## Document Index
 
