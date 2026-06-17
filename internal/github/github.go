@@ -1,7 +1,11 @@
 package github
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -58,6 +62,47 @@ func LatestRelease(r Runner) (string, error) {
 		return "", fmt.Errorf("no releases found for %s", ergoRepo)
 	}
 	return tag, nil
+}
+
+// ChecksumName is the asset name goreleaser publishes the SHA-256 manifest
+// under (configured via .goreleaser.yaml's checksum.name_template). Hardcoded
+// for the same reason ergoRepo is: self-update has exactly one source layout.
+const ChecksumName = "checksums.txt"
+
+// ChecksumFor parses a goreleaser-style checksums file (lines of
+// "<sha256>  <filename>") and returns the hex digest recorded for assetName.
+func ChecksumFor(checksumsPath, assetName string) (string, error) {
+	data, err := os.ReadFile(checksumsPath)
+	if err != nil {
+		return "", fmt.Errorf("reading checksums file: %w", err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		// The filename is the last field; sha256sum -b prefixes it with '*'.
+		name := strings.TrimPrefix(fields[len(fields)-1], "*")
+		if name == assetName {
+			return strings.ToLower(fields[0]), nil
+		}
+	}
+	return "", fmt.Errorf("no checksum found for %s", assetName)
+}
+
+// FileSHA256 returns the lowercase hex SHA-256 digest of the file at path.
+func FileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("opening %s for checksum: %w", path, err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hashing %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // DownloadRelease downloads the asset matching assetPattern from the release

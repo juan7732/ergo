@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,16 @@ type GhStubOptions struct {
 	// `gh release download <tag> --pattern <name> --dir <dir>` is invoked.
 	// The asset is copied to <dir>/<pattern>. If empty, a 1-byte placeholder is used.
 	AssetSource string
+	// CorruptChecksum, when true, makes the served checksums.txt list a wrong
+	// hash for the asset so the update path's verification must fail.
+	CorruptChecksum bool
+}
+
+// runtimeAssetName is the release-asset name `ergo update` derives from the
+// running binary's platform (ergo-<goos>-<goarch>). The integration binary and
+// the test runner share a platform, so this matches what update will request.
+func runtimeAssetName() string {
+	return fmt.Sprintf("ergo-%s-%s", runtime.GOOS, runtime.GOARCH)
 }
 
 // InstallGhStub installs a `gh` shim in the harness PATH dir that serves canned
@@ -71,6 +82,11 @@ type GhStubOptions struct {
 //
 //	gh release list --repo <r> --limit 1 --json tagName --jq .[0].tagName
 //	gh release download <tag> --repo <r> --pattern <name> --dir <dir>
+//
+// A download of the asset copies AssetSource verbatim. A download of
+// "checksums.txt" synthesizes a goreleaser-style checksums file whose entry for
+// the runtime asset is the real SHA-256 of AssetSource (or a wrong hash when
+// CorruptChecksum is set).
 func (h *Harness) InstallGhStub(opts GhStubOptions) {
 	h.t.Helper()
 
@@ -81,8 +97,16 @@ func (h *Harness) InstallGhStub(opts GhStubOptions) {
 		require.NoError(h.t, os.WriteFile(source, []byte("ergo-stub\n"), 0o755))
 	}
 
+	checksumExpr := `$(sha256sum "$src" | cut -d" " -f1)`
+	if opts.CorruptChecksum {
+		checksumExpr = `0000000000000000000000000000000000000000000000000000000000000000`
+	}
+
 	script := fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
+
+src=%q
+asset=%q
 
 if [[ "${1:-}" == "release" && "${2:-}" == "list" ]]; then
   printf '%%s\n' %q
@@ -107,13 +131,18 @@ if [[ "${1:-}" == "release" && "${2:-}" == "download" ]]; then
     exit 2
   fi
   mkdir -p "$dir"
-  cp %q "$dir/$pattern"
+  if [[ "$pattern" == "checksums.txt" ]]; then
+    sum=%s
+    printf '%%s  %%s\n' "$sum" "$asset" > "$dir/$pattern"
+  else
+    cp "$src" "$dir/$pattern"
+  fi
   exit 0
 fi
 
 echo "gh stub: unsupported invocation: $*" >&2
 exit 2
-`, opts.LatestTag, source)
+`, source, runtimeAssetName(), opts.LatestTag, checksumExpr)
 
 	require.NoError(h.t, os.WriteFile(filepath.Join(h.PathDir, "gh"), []byte(script), 0o755))
 }
