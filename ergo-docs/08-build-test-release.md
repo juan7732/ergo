@@ -2,7 +2,10 @@
 
 ## Build
 
-The project builds as a single static-ish binary for **macOS arm64**.
+For local development the project builds a single binary for **macOS arm64**.
+Releases are cross-compiled to the full matrix (darwin/arm64, darwin/amd64,
+linux/amd64, linux/arm64) by [GoReleaser](https://goreleaser.com) — see
+[Cutting a release](#cutting-a-release).
 
 ```bash
 just build       # GOOS=darwin GOARCH=arm64 go build -ldflags ... -o bin/ergo .
@@ -29,7 +32,9 @@ to see all targets. Highlights:
 | `just build`            | Build the binary for darwin/arm64            |
 | `just install`          | `go install` with version ldflag             |
 | `just clean`            | Remove `bin/` and clear Go caches            |
-| `just release <tag>`    | `git tag <tag>` + push (CI handles the rest) |
+| `just release <tag>`    | `git tag <tag>` + push (goreleaser runs in CI) |
+| `just release-check`    | validate `.goreleaser.yaml`                  |
+| `just release-snapshot` | local matrix + formula build into `dist/`    |
 | `just test`             | `go test ./...`                              |
 | `just test-v`           | verbose                                      |
 | `just test-race`        | with race detector                           |
@@ -57,19 +62,35 @@ Two GitHub Actions workflows in [`.github/workflows/`](../../ergo/.github/workfl
 4. `go vet ./...`
 5. `gofmt -l .` must produce empty output
 6. `go test -race -coverprofile=coverage.out ./...`
-7. `GOOS=darwin GOARCH=arm64 go build` (smoke test the cross-build)
+7. Build the **full release matrix** (`darwin/arm64`, `darwin/amd64`,
+   `linux/amd64`, `linux/arm64`) as a cross-compile smoke test.
+
+The `integration` job builds the Docker image and runs the end-to-end suite.
 
 ### `release.yml` — on push of a `v*` tag
 
-1. Checkout with `fetch-depth: 0` (needed for `git describe`/release notes)
+1. Checkout with `fetch-depth: 0` (needed for version/release notes)
 2. Setup Go from `go.mod`
 3. `go test -race ./...`
-4. `go build -ldflags "-X main.version=${{ github.ref_name }}" -o ergo-darwin-arm64 .`
-5. `softprops/action-gh-release@v2` publishes `ergo-darwin-arm64` as a release
-   asset with auto-generated release notes.
+4. `goreleaser/goreleaser-action@v6` runs `goreleaser release --clean`, which:
+   - cross-compiles the full build matrix;
+   - emits per-platform raw binaries named `ergo-<goos>-<goarch>` **and**
+     `.tar.gz` archives;
+   - writes a single `checksums.txt`;
+   - creates the GitHub release with all assets; and
+   - commits the generated formula to
+     [`juan7732/homebrew-tap`](https://github.com/juan7732/homebrew-tap).
 
-The release asset name `ergo-darwin-arm64` matches the `assetName` constant in
-[`cmd/update.go`](../../ergo/cmd/update.go) — keep them in sync.
+The raw asset name `ergo-<goos>-<goarch>` matches the name `ergo update` derives
+from `runtime.GOOS`/`runtime.GOARCH`, and the manifest name `checksums.txt`
+matches `github.ChecksumName` — `ergo update` downloads the matching asset and
+verifies its SHA-256 against `checksums.txt` before swapping. Keep
+[`.goreleaser.yaml`](../../ergo/.goreleaser.yaml) and
+[`cmd/update.go`](../../ergo/cmd/update.go) in sync.
+
+**Required secret:** `HOMEBREW_TAP_TOKEN` — a PAT with write access to
+`juan7732/homebrew-tap` (the default `GITHUB_TOKEN` is scoped to the `ergo` repo
+only and cannot push the formula commit to the separate tap repo).
 
 ## Tests
 
@@ -116,7 +137,7 @@ Build-tagged `integration` (so it doesn't build in normal `go test ./...`).
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `harness.go`     | `Harness` struct: per-test `HOME`, `PATH` prefix dir, `Run/RunIn/RunWith` to invoke the in-container binary, helpers for reading/writing workspace TOMLs and asserting on `Result`. |
 | `gitfixtures.go` | Local fixture-repo helpers so tests can `git clone` from a `git://` URL or local path without touching the network.                                                                 |
-| `stubs.go`       | Fake `gh` and `code` binaries the harness writes into `PathDir` so `update` tests can serve canned release JSON and `open`/`edit` tests can record `code` invocations.              |
+| `stubs.go`       | Fake `gh` and `code` binaries the harness writes into `PathDir` so `update` tests can serve canned release tags, assets, and a matching (or deliberately corrupt) `checksums.txt`, and `open`/`edit` tests can record `code` invocations. |
 
 `Result` carries `Stdout`, `Stderr`, `Combined`, `ExitCode`, `Err`, plus
 `AssertOK(t)` / `AssertFail(t)` helpers.
@@ -126,16 +147,17 @@ assertions stable across environments.
 
 ### Running
 
-The implementation plan defines:
+The dockerized suite runs via `just`:
 
 ```bash
-make integration         # docker compose run --rm ergo-test
-make integration-shell   # interactive shell in the container for debugging
+just integration         # build the image + run the end-to-end suite
+just integration-race    # same, with the race detector
+just integration-shell   # interactive shell in the container for debugging
 ```
 
-(The `Makefile` and `docker-compose.yml` referenced in the plan are not yet
-present in the tree — they belong to phase 10 and may still be in progress.
-The Dockerfile and harness are in place.)
+These recipes drive `docker build`/`docker run` against
+[`test/integration/Dockerfile`](../../ergo/test/integration/Dockerfile)
+directly — there is no `Makefile` or `docker-compose.yml`.
 
 ### TUI scope explicitly excluded
 
@@ -162,8 +184,19 @@ a Conventional Commit message, push to current branch (refuses to push to
 
 ```bash
 just release v0.2.0
-# triggers .github/workflows/release.yml on the pushed tag
+# tags v0.2.0 and pushes it, triggering .github/workflows/release.yml
 ```
 
-The workflow builds, tests, and uploads the binary. Users can then run
-`ergo update` to fetch it.
+The tag push runs GoReleaser, which cross-compiles the matrix, publishes the
+GitHub release (raw `ergo-<os>-<arch>` binaries, `.tar.gz` archives, and
+`checksums.txt`), and commits the updated formula to `juan7732/homebrew-tap`.
+Homebrew users then `brew upgrade ergo`; standalone-binary users run
+`ergo update`.
+
+To dry-run the whole pipeline locally before tagging (requires `goreleaser` on
+PATH):
+
+```bash
+just release-check       # validate .goreleaser.yaml
+just release-snapshot    # build matrix + formula into dist/ without publishing
+```
