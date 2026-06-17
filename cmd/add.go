@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -198,22 +197,30 @@ func checkNameCollision(name string, cfg config.WorkspaceConfig) error {
 	return nil
 }
 
+// stdinIsTerminal reports whether stdin is interactive. A package var so tests
+// can drive promptSync without a real TTY.
+var stdinIsTerminal = isTerminal
+
 // promptSync asks whether to sync the workspace now and does so if confirmed.
 // Only prompts when stdin is a terminal; silently skips otherwise.
+//
+// The sync is invoked with explicit zero-value parameters — never by replaying
+// the add command's context — so add-only flags like --name do not leak into
+// the sync as filters.
 func promptSync(cmd *cobra.Command, name string) error {
-	if !isTerminal() {
+	if !stdinIsTerminal() {
 		return nil
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprint(out, "sync workspace now? [y/N] ")
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(cmd.InOrStdin())
 	if !scanner.Scan() {
 		return nil
 	}
 	if strings.ToLower(strings.TrimSpace(scanner.Text())) != "y" {
 		return nil
 	}
-	return runSync(cmd, []string{name})
+	return syncRunner(cmd, name, syncParams{})
 }
 
 // splitCSV splits a comma-separated string and trims whitespace from each part.
