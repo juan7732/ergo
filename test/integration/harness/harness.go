@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -133,6 +134,25 @@ func (h *Harness) RunWith(opts RunOpts, args ...string) Result {
 		opts.Cwd = h.Home
 	}
 
+	// Tests that stage their own binary write it with os.WriteFile and then exec
+	// it. Under t.Parallel(), another test's fork (between fork and execve) can
+	// be holding a copy of our just-written, still-writable fd, so the kernel
+	// rejects the exec with ETXTBSY ("text file busy"). The writer always closes
+	// promptly, so a brief retry clears it. See golang/go#22315.
+	const maxAttempts = 8
+	var res Result
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		res = h.runOnce(opts, args...)
+		if res.Err == nil || !errors.Is(res.Err, syscall.ETXTBSY) {
+			break
+		}
+		time.Sleep(time.Duration(attempt) * 10 * time.Millisecond)
+	}
+	return res
+}
+
+// runOnce performs a single ergo invocation attempt.
+func (h *Harness) runOnce(opts RunOpts, args ...string) Result {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
 	defer cancel()
 
