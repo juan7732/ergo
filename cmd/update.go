@@ -19,6 +19,41 @@ var updateCmd = &cobra.Command{
 	RunE:  runUpdate,
 }
 
+// releaseAssetName is the raw per-platform asset name goreleaser publishes and
+// `ergo update` downloads, e.g. "ergo-darwin-arm64" or "ergo-windows-amd64.exe".
+func releaseAssetName(goos, goarch string) string {
+	name := fmt.Sprintf("ergo-%s-%s", goos, goarch)
+	if goos == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// replaceBinary installs newPath as the running binary at exePath.
+//
+// On Unix a same-filesystem os.Rename is atomic. On Windows a running .exe
+// cannot be overwritten, so the current binary is first moved aside to
+// <exePath>.old (cleaned up best-effort here and on the next update run).
+func replaceBinary(newPath, exePath string) error {
+	if runtime.GOOS == "windows" {
+		old := exePath + ".old"
+		_ = os.Remove(old) // clear any leftover from a prior update
+		if err := os.Rename(exePath, old); err != nil {
+			return fmt.Errorf("moving current binary aside: %w", err)
+		}
+		if err := os.Rename(newPath, exePath); err != nil {
+			_ = os.Rename(old, exePath) // best-effort rollback
+			return fmt.Errorf("installing new binary: %w", err)
+		}
+		_ = os.Remove(old) // will fail while the process holds it; cleaned next run
+		return nil
+	}
+	if err := os.Rename(newPath, exePath); err != nil {
+		return fmt.Errorf("replacing binary: %w", err)
+	}
+	return nil
+}
+
 // homebrewPrefixes returns the candidate Homebrew install prefixes to test the
 // running binary against, $HOMEBREW_PREFIX first when set.
 func homebrewPrefixes() []string {
@@ -91,9 +126,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(out, "Updating ergo %s → %s\n", version, latest)
 
 	exeDir := filepath.Dir(exePath)
-	// Release assets are named per-platform (ergo-<goos>-<goarch>), matching the
-	// goreleaser build matrix, so the right binary is fetched on every platform.
-	assetName := fmt.Sprintf("ergo-%s-%s", runtime.GOOS, runtime.GOARCH)
+	// Release assets are named per-platform (ergo-<goos>-<goarch>, .exe on
+	// Windows), matching the goreleaser build matrix, so the right binary is
+	// fetched on every platform.
+	assetName := releaseAssetName(runtime.GOOS, runtime.GOARCH)
 	downloadedPath := filepath.Join(exeDir, assetName)
 	checksumsPath := filepath.Join(exeDir, github.ChecksumName)
 
@@ -131,9 +167,8 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("setting permissions on downloaded binary: %w", err)
 	}
 
-	// os.Rename is atomic on the same filesystem, replacing the running binary.
-	if err := os.Rename(downloadedPath, exePath); err != nil {
-		return fmt.Errorf("replacing binary: %w", err)
+	if err := replaceBinary(downloadedPath, exePath); err != nil {
+		return err
 	}
 	downloaded = false // rename consumed the file; skip deferred remove
 

@@ -3,8 +3,8 @@
 ## Build
 
 For local development the project builds a single binary for **macOS arm64**.
-Releases are cross-compiled to the full matrix (darwin/arm64, darwin/amd64,
-linux/amd64, linux/arm64) by [GoReleaser](https://goreleaser.com) — see
+Releases are cross-compiled to the full matrix ({darwin, linux, windows} ×
+{amd64, arm64}) by [GoReleaser](https://goreleaser.com) — see
 [Cutting a release](#cutting-a-release).
 
 ```bash
@@ -62,8 +62,8 @@ Two GitHub Actions workflows in [`.github/workflows/`](../../ergo/.github/workfl
 4. `go vet ./...`
 5. `gofmt -l .` must produce empty output
 6. `go test -race -coverprofile=coverage.out ./...`
-7. Build the **full release matrix** (`darwin/arm64`, `darwin/amd64`,
-   `linux/amd64`, `linux/arm64`) as a cross-compile smoke test.
+7. Build the **full release matrix** (`{darwin,linux,windows}` ×
+   `{amd64,arm64}`) as a cross-compile smoke test.
 
 The `integration` job builds the Docker image and runs the end-to-end suite.
 
@@ -74,8 +74,8 @@ The `integration` job builds the Docker image and runs the end-to-end suite.
 3. `go test -race ./...`
 4. `goreleaser/goreleaser-action@v6` runs `goreleaser release --clean`, which:
    - cross-compiles the full build matrix;
-   - emits per-platform raw binaries named `ergo-<goos>-<goarch>` **and**
-     `.tar.gz` archives;
+   - emits per-platform raw binaries named `ergo-<goos>-<goarch>` (`.exe` on
+     Windows) **and** archives (`.tar.gz` on Unix, `.zip` on Windows);
    - writes a single `checksums.txt`;
    - creates the GitHub release with all assets; and
    - commits the generated formula to

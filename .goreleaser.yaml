@@ -2,9 +2,9 @@
 # Docs: https://goreleaser.com
 #
 # Produces, for each target platform:
-#   - a raw binary asset named ergo-<goos>-<goarch>   (consumed by `ergo update`)
-#   - a .tar.gz archive                                (consumed by the Homebrew formula)
-#   - a single checksums.txt covering every asset      (verified by `ergo update`)
+#   - a raw binary asset named ergo-<goos>-<goarch> (.exe on Windows), consumed by `ergo update`
+#   - an archive: .tar.gz (Unix) / .zip (Windows); the Homebrew formula uses the Unix ones
+#   - a single checksums.txt covering every asset, verified by `ergo update`
 # and publishes a GitHub release plus a formula commit to juan7732/homebrew-tap.
 version: 2
 
@@ -20,10 +20,11 @@ builds:
     binary: ergo
     env:
       - CGO_ENABLED=0
-    # Build matrix: darwin/{arm64,amd64}, linux/{amd64,arm64}.
+    # Build matrix: {darwin,linux,windows} × {amd64,arm64}.
     goos:
       - darwin
       - linux
+      - windows
     goarch:
       - amd64
       - arm64
@@ -32,16 +33,22 @@ builds:
       - -s -w -X main.version={{ .Version }}
 
 archives:
-  # Raw per-platform binaries named exactly ergo-<goos>-<goarch>, matching the
-  # asset name `ergo update` derives from runtime.GOOS/runtime.GOARCH.
+  # Raw per-platform binaries named exactly ergo-<goos>-<goarch> (with a .exe
+  # suffix on Windows), matching the asset name `ergo update` derives from
+  # runtime.GOOS/runtime.GOARCH.
   - id: binary
     ids: [ergo]
     formats: [binary]
+    # goreleaser appends the .exe extension automatically on Windows, yielding
+    # ergo-windows-<arch>.exe — matching releaseAssetName() in cmd/update.go.
     name_template: "ergo-{{ .Os }}-{{ .Arch }}"
-  # Conventional tarballs for Homebrew (the formula extracts and installs `ergo`).
-  - id: targz
+  # Conventional archives: tarballs on Unix (used by Homebrew), zips on Windows.
+  - id: archive
     ids: [ergo]
     formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: "ergo_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 # Single SHA-256 manifest. The name must stay in sync with github.ChecksumName
@@ -63,8 +70,9 @@ release:
 # the release workflow pins `~> v2`. Revisit if/when v2 removes it.
 brews:
   - name: ergo
-    # Use only the tarball archives for the formula's url/sha256.
-    ids: [targz]
+    # Use the archive set for the formula's url/sha256 (goreleaser ignores the
+    # Windows zips when generating a formula — Homebrew is macOS/Linux only).
+    ids: [archive]
     repository:
       owner: juan7732
       name: homebrew-tap

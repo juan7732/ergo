@@ -32,11 +32,16 @@ go install github.com/juan7732/ergo@latest
 
 ### Prebuilt binary
 
-Download the `ergo-<os>-<arch>` asset for your platform (darwin/linux ×
-amd64/arm64) from [Releases](https://github.com/juan7732/ergo/releases), verify
-it against the release `checksums.txt`, and place it on your PATH. A standalone
-binary installed this way keeps itself current with `ergo update`, which fetches
-the matching asset and verifies its SHA-256 before swapping atomically.
+Download the `ergo-<os>-<arch>` asset for your platform (darwin / linux /
+windows × amd64 / arm64; Windows assets carry a `.exe` suffix) from
+[Releases](https://github.com/juan7732/ergo/releases), verify it against the
+release `checksums.txt`, and place it on your PATH. A standalone binary installed
+this way keeps itself current with `ergo update`, which fetches the matching
+asset and verifies its SHA-256 before swapping it in (on Windows the running
+`.exe` is moved aside first, since it can't be overwritten in place).
+
+> **Windows:** Homebrew is macOS/Linux only — install via the prebuilt `.exe`.
+> A `winget` channel is on the roadmap.
 
 ## Quickstart
 
