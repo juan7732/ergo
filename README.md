@@ -15,12 +15,33 @@ file is the single source of truth.
 
 ## Install
 
+### Homebrew (recommended)
+
+```bash
+brew install juan7732/tap/ergo
+```
+
+Updates flow through Homebrew (`brew upgrade ergo`). A Homebrew-managed binary
+detects this and `ergo update` defers to `brew upgrade` rather than self-replacing.
+
+### go install
+
 ```bash
 go install github.com/juan7732/ergo@latest
 ```
 
-Or download the binary from [Releases](https://github.com/juan7732/ergo/releases) and
-place it on your PATH.
+### Prebuilt binary
+
+Download the `ergo-<os>-<arch>` asset for your platform (darwin / linux /
+windows × amd64 / arm64; Windows assets carry a `.exe` suffix) from
+[Releases](https://github.com/juan7732/ergo/releases), verify it against the
+release `checksums.txt`, and place it on your PATH. A standalone binary installed
+this way keeps itself current with `ergo update`, which fetches the matching
+asset and verifies its SHA-256 before swapping it in (on Windows the running
+`.exe` is moved aside first, since it can't be overwritten in place).
+
+> **Windows:** Homebrew is macOS/Linux only — install via the prebuilt `.exe`.
+> A `winget` channel is on the roadmap.
 
 ## Quickstart
 

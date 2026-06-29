@@ -1,0 +1,102 @@
+# goreleaser configuration for ergo.
+# Docs: https://goreleaser.com
+#
+# Produces, for each target platform:
+#   - a raw binary asset named ergo-<goos>-<goarch> (.exe on Windows), consumed by `ergo update`
+#   - an archive: .tar.gz (Unix) / .zip (Windows); the Homebrew formula uses the Unix ones
+#   - a single checksums.txt covering every asset, verified by `ergo update`
+# and publishes a GitHub release plus a formula commit to juan7732/homebrew-tap.
+version: 2
+
+project_name: ergo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ergo
+    main: .
+    binary: ergo
+    env:
+      - CGO_ENABLED=0
+    # Build matrix: {darwin,linux,windows} × {amd64,arm64}.
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Embed the release version via the existing main.version ldflag.
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  # Raw per-platform binaries named exactly ergo-<goos>-<goarch> (with a .exe
+  # suffix on Windows), matching the asset name `ergo update` derives from
+  # runtime.GOOS/runtime.GOARCH.
+  - id: binary
+    ids: [ergo]
+    formats: [binary]
+    # goreleaser appends the .exe extension automatically on Windows, yielding
+    # ergo-windows-<arch>.exe — matching releaseAssetName() in cmd/update.go.
+    name_template: "ergo-{{ .Os }}-{{ .Arch }}"
+  # Conventional archives: tarballs on Unix (used by Homebrew), zips on Windows.
+  - id: archive
+    ids: [ergo]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "ergo_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+# Single SHA-256 manifest. The name must stay in sync with github.ChecksumName
+# in internal/github/github.go, which `ergo update` downloads and verifies.
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  draft: false
+  prerelease: auto
+
+# DECISION: ergo ships as a Homebrew *formula* (not a cask) committed to an
+# external tap. goreleaser v2 marks `brews` deprecated in favor of
+# `homebrew_casks`, but a cask changes the install semantics (Casks/ dir, binary
+# stanza, different depends_on handling) away from the formula contract this
+# project targets (git as a hard dep, gh/code documented in caveats, a Formula/
+# directory in the tap). `brews` remains functional throughout goreleaser v2;
+# the release workflow pins `~> v2`. Revisit if/when v2 removes it.
+brews:
+  - name: ergo
+    # Use the archive set for the formula's url/sha256 (goreleaser ignores the
+    # Windows zips when generating a formula — Homebrew is macOS/Linux only).
+    ids: [archive]
+    repository:
+      owner: juan7732
+      name: homebrew-tap
+      branch: main
+      # The default GITHUB_TOKEN cannot push to a different repo, so the release
+      # workflow supplies a PAT with write access to homebrew-tap.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/juan7732/ergo"
+    description: "Multi-repo VS Code workspace manager"
+    license: "MIT"
+    # Runtime dependency: ergo shells out to git for clone/pull/status/run.
+    # `gh` (ergo update) and the `code` CLI (ergo open/edit) are optional and
+    # only needed by specific commands — see caveats rather than hard-depending.
+    dependencies:
+      - name: git
+    install: |
+      bin.install "ergo"
+    test: |
+      system "#{bin}/ergo", "--version"
+    caveats: |
+      ergo shells out to a few tools for specific commands:
+        • gh   (GitHub CLI) — required by `ergo update`
+        • code (VS Code CLI) — required by `ergo open` and `ergo edit`
+      Install them if you use those commands:
+        brew install gh
+        # VS Code: enable the `code` command via "Shell Command: Install 'code' command in PATH"

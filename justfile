@@ -21,11 +21,20 @@ clean:
     rm -rf bin/
     go clean -cache -testcache
 
-# Tag and push a release (CI handles the rest)
+# Tag and push a release (goreleaser runs in CI on the pushed tag)
 release tag:
     git tag {{tag}}
     git push origin {{tag}}
     @echo "Release {{tag}} triggered — check Actions tab for progress"
+
+# Validate the goreleaser config (requires goreleaser on PATH).
+release-check:
+    goreleaser check
+
+# Local dry-run: build the full matrix + Homebrew formula into dist/ without
+# publishing. Useful before cutting a tag. Requires goreleaser on PATH.
+release-snapshot:
+    HOMEBREW_TAP_TOKEN=dummy goreleaser release --snapshot --clean --skip=publish
 
 # ─── Test ─────────────────────────────────────────────────────────────────────
 

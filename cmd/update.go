@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,7 +19,89 @@ var updateCmd = &cobra.Command{
 	RunE:  runUpdate,
 }
 
+// releaseAssetName is the raw per-platform asset name goreleaser publishes and
+// `ergo update` downloads, e.g. "ergo-darwin-arm64" or "ergo-windows-amd64.exe".
+func releaseAssetName(goos, goarch string) string {
+	name := fmt.Sprintf("ergo-%s-%s", goos, goarch)
+	if goos == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// replaceBinary installs newPath as the running binary at exePath.
+//
+// On Unix a same-filesystem os.Rename is atomic. On Windows a running .exe
+// cannot be overwritten, so the current binary is first moved aside to
+// <exePath>.old (cleaned up best-effort here and on the next update run).
+func replaceBinary(newPath, exePath string) error {
+	if runtime.GOOS == "windows" {
+		old := exePath + ".old"
+		_ = os.Remove(old) // clear any leftover from a prior update
+		if err := os.Rename(exePath, old); err != nil {
+			return fmt.Errorf("moving current binary aside: %w", err)
+		}
+		if err := os.Rename(newPath, exePath); err != nil {
+			_ = os.Rename(old, exePath) // best-effort rollback
+			return fmt.Errorf("installing new binary: %w", err)
+		}
+		_ = os.Remove(old) // will fail while the process holds it; cleaned next run
+		return nil
+	}
+	if err := os.Rename(newPath, exePath); err != nil {
+		return fmt.Errorf("replacing binary: %w", err)
+	}
+	return nil
+}
+
+// homebrewPrefixes returns the candidate Homebrew install prefixes to test the
+// running binary against, $HOMEBREW_PREFIX first when set.
+func homebrewPrefixes() []string {
+	prefixes := []string{"/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"}
+	if p := os.Getenv("HOMEBREW_PREFIX"); p != "" {
+		prefixes = append([]string{p}, prefixes...)
+	}
+	return prefixes
+}
+
+// homebrewPrefixFor reports the Homebrew prefix that exePath lives under, if any.
+func homebrewPrefixFor(exePath string) (string, bool) {
+	exePath = filepath.Clean(exePath)
+	for _, prefix := range homebrewPrefixes() {
+		prefix = filepath.Clean(prefix)
+		if exePath == prefix || strings.HasPrefix(exePath, prefix+string(filepath.Separator)) {
+			return prefix, true
+		}
+	}
+	return "", false
+}
+
 func runUpdate(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+
+	// Resolve the real path of the running binary up front; it drives both the
+	// managed-install check and the eventual atomic swap target.
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable path: %w", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return fmt.Errorf("resolving symlinks for executable: %w", err)
+	}
+
+	// DECISION: A Homebrew-managed install must not self-replace its binary —
+	// doing so fights the package manager (brew owns the file under its Cellar,
+	// and a hand-swapped binary is clobbered on the next `brew upgrade`). The
+	// spec is silent on detection mechanics, so we follow the project task's
+	// rule: treat the install as managed when the resolved binary lives under a
+	// Homebrew prefix ($HOMEBREW_PREFIX, else the well-known defaults). Only the
+	// standalone release-download install path self-updates.
+	if prefix, managed := homebrewPrefixFor(exePath); managed {
+		fmt.Fprintf(out, "ergo was installed via Homebrew (%s) — run 'brew upgrade ergo' to update\n", prefix)
+		return nil
+	}
+
 	runner := github.ExecRunner{}
 
 	if err := github.CheckPath(); err != nil {
@@ -36,29 +119,24 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	// "dev" builds always attempt an update.
 	if currentVer == latestVer && currentVer != "dev" {
-		fmt.Fprintf(cmd.OutOrStdout(), "ergo is already up to date (%s)\n", latest)
+		fmt.Fprintf(out, "ergo is already up to date (%s)\n", latest)
 		return nil
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Updating ergo %s → %s\n", version, latest)
-
-	// Resolve the real path of the running binary.
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolving executable path: %w", err)
-	}
-	exePath, err = filepath.EvalSymlinks(exePath)
-	if err != nil {
-		return fmt.Errorf("resolving symlinks for executable: %w", err)
-	}
+	fmt.Fprintf(out, "Updating ergo %s → %s\n", version, latest)
 
 	exeDir := filepath.Dir(exePath)
-	const assetName = "ergo-darwin-arm64"
+	// Release assets are named per-platform (ergo-<goos>-<goarch>, .exe on
+	// Windows), matching the goreleaser build matrix, so the right binary is
+	// fetched on every platform.
+	assetName := releaseAssetName(runtime.GOOS, runtime.GOARCH)
 	downloadedPath := filepath.Join(exeDir, assetName)
+	checksumsPath := filepath.Join(exeDir, github.ChecksumName)
 
-	// Clean up downloaded asset on any failure after this point.
+	// Clean up downloaded artifacts on any failure after this point.
 	var downloaded bool
 	defer func() {
+		_ = os.Remove(checksumsPath)
 		if !downloaded {
 			_ = os.Remove(downloadedPath)
 		}
@@ -69,16 +147,31 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 	downloaded = true
 
+	// Verify the asset against the release checksums before trusting it.
+	if err := github.DownloadRelease(runner, latest, github.ChecksumName, exeDir); err != nil {
+		return fmt.Errorf("downloading checksums: %w", err)
+	}
+	expected, err := github.ChecksumFor(checksumsPath, assetName)
+	if err != nil {
+		return err
+	}
+	actual, err := github.FileSHA256(downloadedPath)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", assetName, expected, actual)
+	}
+
 	if err := os.Chmod(downloadedPath, 0o755); err != nil {
 		return fmt.Errorf("setting permissions on downloaded binary: %w", err)
 	}
 
-	// os.Rename is atomic on the same filesystem, replacing the running binary.
-	if err := os.Rename(downloadedPath, exePath); err != nil {
-		return fmt.Errorf("replacing binary: %w", err)
+	if err := replaceBinary(downloadedPath, exePath); err != nil {
+		return err
 	}
 	downloaded = false // rename consumed the file; skip deferred remove
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Updated to %s\n", latest)
+	fmt.Fprintf(out, "Updated to %s\n", latest)
 	return nil
 }

@@ -32,8 +32,17 @@ jobs:
       - name: Test with race detector
         run: go test -race -coverprofile=coverage.out ./...
 
-      - name: Build
-        run: GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=ci" -o bin/ergo .
+      - name: Build (full release matrix)
+        run: |
+          set -euo pipefail
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            ext=""; [ "$os" = "windows" ] && ext=".exe"
+            echo "::group::build $os/$arch"
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+              go build -ldflags "-X main.version=ci" -o "bin/ergo-$os-$arch$ext" .
+            echo "::endgroup::"
+          done
 
   integration:
     name: Integration (docker)

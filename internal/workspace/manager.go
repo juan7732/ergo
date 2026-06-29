@@ -72,6 +72,12 @@ type SyncOptions struct {
 	// Progress, when non-nil, is called after each repo completes (possibly from
 	// multiple goroutines — callers must be thread-safe).
 	Progress func(name string, action RepoAction, err error)
+	// KnownNames lists every repo/folder name considered "in the config" for
+	// orphan detection. When nil, the known set is derived from cfg. Callers that
+	// pass a filtered cfg (e.g. `sync --group=x`) must set this to the names from
+	// the *full* config, so directories outside the filter are not reported as
+	// orphans — the filter narrows the operation set only, never orphan detection.
+	KnownNames []string
 }
 
 // Sync reconciles the workspace directory on disk with cfg.
@@ -92,16 +98,26 @@ func Sync(cfg config.WorkspaceConfig, opts SyncOptions, r git.Runner) (SyncResul
 		return SyncResult{}, fmt.Errorf("creating workspace directory %s: %w", opts.WorkspaceDir, err)
 	}
 
-	// Build a set of known names (repos + folders) for orphan detection.
-	knownNames := make(map[string]struct{}, len(cfg.Repos)+len(cfg.Folders))
-
 	repoResults := make([]RepoResult, len(cfg.Repos))
 	for i, repo := range cfg.Repos {
-		knownNames[repo.EffectiveName()] = struct{}{}
 		repoResults[i] = RepoResult{Name: repo.EffectiveName()}
 	}
-	for _, folder := range cfg.Folders {
-		knownNames[folder.Name] = struct{}{}
+
+	// Build the set of known names for orphan detection. Prefer the caller-
+	// supplied full set (opts.KnownNames); fall back to deriving it from cfg
+	// when the caller operates on the complete config.
+	knownNames := make(map[string]struct{}, len(cfg.Repos)+len(cfg.Folders))
+	if opts.KnownNames != nil {
+		for _, n := range opts.KnownNames {
+			knownNames[n] = struct{}{}
+		}
+	} else {
+		for _, repo := range cfg.Repos {
+			knownNames[repo.EffectiveName()] = struct{}{}
+		}
+		for _, folder := range cfg.Folders {
+			knownNames[folder.Name] = struct{}{}
+		}
 	}
 
 	// Sync repos — potentially in parallel.

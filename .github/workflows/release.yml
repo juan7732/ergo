@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  goreleaser:
     name: Build & Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # needed for git describe and release notes
+          fetch-depth: 0 # needed for changelog/release notes and version
 
       - uses: actions/setup-go@v5
         with:
@@ -25,16 +25,16 @@ jobs:
       - name: Run tests
         run: go test -race ./...
 
-      - name: Build macOS arm64
-        env:
-          GOOS: darwin
-          GOARCH: arm64
-        run: go build -ldflags "-X main.version=${{ github.ref_name }}" -o ergo-darwin-arm64 .
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          files: ergo-darwin-arm64
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          # Publishes the release and its assets to juan7732/ergo.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with write access to juan7732/homebrew-tap so the brews block can
+          # commit the formula to that separate repo (the default GITHUB_TOKEN
+          # is scoped to this repo only).
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

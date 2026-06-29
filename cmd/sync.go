@@ -40,8 +40,23 @@ func init() {
 	syncCmd.Flags().String("name", "", "Filter repos by name (glob pattern, case-insensitive)")
 	syncCmd.Flags().String("group", "", "Filter repos to this group")
 	syncCmd.Flags().StringSlice("tags", nil, "Filter repos by tags, any-match (comma-separated or repeated flag)")
+	// --force deletes orphans, --add adopts them: contradictory in one run, and
+	// running both would delete dirs the --add step then tries to re-adopt.
+	syncCmd.MarkFlagsMutuallyExclusive("force", "add")
 	rootCmd.AddCommand(syncCmd)
 }
+
+// syncParams captures everything executeSync needs beyond the resolved
+// workspace name. The zero value means "sync everything, delete nothing".
+type syncParams struct {
+	Force  bool
+	Add    bool
+	Filter workspace.FilterOptions
+}
+
+// syncRunner is the seam executeSync is reached through, so callers like
+// promptSync can be tested without spawning a real sync.
+var syncRunner = executeSync
 
 func runSync(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
@@ -56,6 +71,17 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	filterOpts, err := filterOptsFromFlags(cmd, nil)
+	if err != nil {
+		return err
+	}
+
+	return syncRunner(cmd, name, syncParams{Force: force, Add: add, Filter: filterOpts})
+}
+
+func executeSync(cmd *cobra.Command, name string, p syncParams) error {
+	force, add := p.Force, p.Add
 
 	globalCfg, err := config.LoadGlobal()
 	if err != nil {
@@ -74,14 +100,20 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading workspace config: %w", err)
 	}
 
-	// Apply filter flags to restrict which repos are synced.
-	filterOpts, err := filterOptsFromFlags(cmd, nil)
-	if err != nil {
-		return err
-	}
-	filteredRepos := workspace.ApplyRepoFilter(wsCfg.Repos, filterOpts)
+	// Apply filter flags to restrict which repos are synced. Orphan detection,
+	// however, always runs against the full config (knownNames below) so that
+	// out-of-filter repos are never mistaken for orphans.
+	filteredRepos := workspace.ApplyRepoFilter(wsCfg.Repos, p.Filter)
 	syncCfg := wsCfg
 	syncCfg.Repos = filteredRepos
+
+	knownNames := make([]string, 0, len(wsCfg.Repos)+len(wsCfg.Folders))
+	for _, r := range wsCfg.Repos {
+		knownNames = append(knownNames, r.EffectiveName())
+	}
+	for _, f := range wsCfg.Folders {
+		knownNames = append(knownNames, f.Name)
+	}
 
 	fmt.Fprintf(out, "syncing workspace %q → %s\n\n", name, wsDir)
 
@@ -90,6 +122,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		AutoPull:     globalCfg.Sync.AutoPull,
 		Parallel:     globalCfg.Parallel.Enabled,
 		BatchSize:    globalCfg.Parallel.BatchSize,
+		KnownNames:   knownNames,
 		Progress: func(repoName string, action workspace.RepoAction, syncErr error) {
 			if syncErr != nil {
 				fmt.Fprintf(out, "  ✗ %-30s %s\n", repoName, syncErr)
