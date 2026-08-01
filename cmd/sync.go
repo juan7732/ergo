@@ -162,9 +162,19 @@ func executeSync(cmd *cobra.Command, name string, p syncParams) error {
 		}
 	}
 
-	// Regenerate .code-workspace.
+	// Regenerate .code-workspace, preserving any active show filter recorded
+	// in the existing file (ergo-vscode-spec.md §3.2). A missing or malformed
+	// file degrades to nil — regenerate unfiltered, never fail sync over
+	// filter recovery.
+	//
+	// DECISION: the show filter is purely a view concern. Sync always
+	// operates on the full TOML — repos hidden by the filter were still
+	// cloned/pulled above; only the folders list of the generated file (and
+	// the recorded ergo.filter) reflect it. The operation set is governed
+	// solely by the explicit --name/--group/--tags flags.
 	wsFilePath := filepath.Join(wsDir, name+".code-workspace")
-	wsBytes, err := vscode.Generate(wsCfg, nil)
+	viewFilter := preservedFilter(wsFilePath)
+	wsBytes, err := generateView(wsCfg, viewFilter)
 	if err != nil {
 		return fmt.Errorf("generating .code-workspace: %w", err)
 	}
@@ -177,6 +187,10 @@ func executeSync(cmd *cobra.Command, name string, p syncParams) error {
 		fmt.Fprintf(out, "  updated  %s\n", filepath.Base(wsFilePath))
 	} else {
 		fmt.Fprintf(out, "  unchanged  %s\n", filepath.Base(wsFilePath))
+	}
+	if viewFilter != nil {
+		visible := len(workspace.ApplyRepoFilter(wsCfg.Repos, showFilterOptions(viewFilter)))
+		fmt.Fprintln(out, filterNote(viewFilter, visible, len(wsCfg.Repos)))
 	}
 
 	// Report orphans.

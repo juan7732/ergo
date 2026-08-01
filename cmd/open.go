@@ -74,8 +74,36 @@ func runOpen(cmd *cobra.Command, args []string) error {
 
 	wsFilePath := filepath.Join(wsDir, name+".code-workspace")
 
+	// Preserve any active show filter recorded in the existing file
+	// (ergo-vscode-spec.md §3.2): the regenerated .code-workspace keeps the
+	// filtered folders list and the ergo.filter record. A missing or
+	// malformed file degrades to nil — regenerate unfiltered, never fail
+	// open over filter recovery. Like sync, this is a view concern only:
+	// first-time materialization still clones every repo in the TOML.
+	viewFilter := preservedFilter(wsFilePath)
+	expected, err := generateView(wsCfg, viewFilter)
+	if err != nil {
+		return fmt.Errorf("generating .code-workspace: %w", err)
+	}
+
+	// printFilterNote surfaces the preserved filter once per invocation.
+	// With --print-dir it goes to stderr so stdout stays clean for shell
+	// capture: cd "$(ergo open --print-dir foo)".
+	printFilterNote := func() {
+		if viewFilter == nil {
+			return
+		}
+		noteOut := cmd.OutOrStdout()
+		if openPrintDir {
+			noteOut = cmd.ErrOrStderr()
+		}
+		visible := len(workspace.ApplyRepoFilter(wsCfg.Repos, showFilterOptions(viewFilter)))
+		fmt.Fprintln(noteOut, filterNote(viewFilter, visible, len(wsCfg.Repos)))
+	}
+
 	// Check for the fast path: workspace dir exists and .code-workspace is current.
-	if isWorkspaceCurrent(wsDir, wsFilePath, wsCfg) {
+	if isWorkspaceCurrent(wsDir, wsFilePath, expected) {
+		printFilterNote()
 		if openPrintDir {
 			fmt.Fprintln(cmd.OutOrStdout(), wsDir)
 			return nil
@@ -149,14 +177,11 @@ func runOpen(cmd *cobra.Command, args []string) error {
 	}
 
 	// Regenerate .code-workspace (smart — only write if changed).
-	wsBytes, err := vscode.Generate(wsCfg, nil)
-	if err != nil {
-		return fmt.Errorf("generating .code-workspace: %w", err)
-	}
-	if _, err := vscode.WriteIfChanged(wsFilePath, wsBytes); err != nil {
+	if _, err := vscode.WriteIfChanged(wsFilePath, expected); err != nil {
 		return fmt.Errorf("writing .code-workspace: %w", err)
 	}
 
+	printFilterNote()
 	if openPrintDir {
 		fmt.Fprintln(cmd.OutOrStdout(), wsDir)
 		return nil
@@ -167,17 +192,14 @@ func runOpen(cmd *cobra.Command, args []string) error {
 }
 
 // isWorkspaceCurrent returns true when the workspace directory exists on disk
-// and the existing .code-workspace file matches what would be generated from wsCfg.
+// and the existing .code-workspace file already matches the expected bytes
+// (generated from the TOML through any preserved view filter).
 // Returns false on any I/O error (conservative: triggers regeneration).
-func isWorkspaceCurrent(wsDir, wsFilePath string, wsCfg config.WorkspaceConfig) bool {
+func isWorkspaceCurrent(wsDir, wsFilePath string, expected []byte) bool {
 	if !dirExistsOnDisk(wsDir) {
 		return false
 	}
 	existing, err := os.ReadFile(wsFilePath)
-	if err != nil {
-		return false
-	}
-	expected, err := vscode.Generate(wsCfg, nil)
 	if err != nil {
 		return false
 	}
