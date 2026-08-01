@@ -84,4 +84,7 @@ This documentation set is organized into focused topic files:
 10. [10-extension-points.md](10-extension-points.md) — v2 candidates and where they would slot in.
 
 Per-version release notes live in [release-notes/](release-notes/) (one file
-per released tag, e.g. [release-notes/v0.2.0.md](release-notes/v0.2.0.md)).
+per released tag, e.g. [release-notes/v0.2.0.md](release-notes/v0.2.0.md));
+conventions in [release-notes/README.md](release-notes/README.md), and the
+release flow itself in
+[08-build-test-release.md](08-build-test-release.md#cutting-a-release).

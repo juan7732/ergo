@@ -182,21 +182,87 @@ a Conventional Commit message, push to current branch (refuses to push to
 
 ## Cutting a release
 
+The release is **tag-driven**: pushing a `v*` tag triggers
+[`release.yml`](../../ergo/.github/workflows/release.yml), which re-runs the
+race-enabled test suite and then GoReleaser cross-compiles the matrix,
+publishes the GitHub release (raw `ergo-<os>-<arch>` binaries, `.tar.gz`
+archives, and `checksums.txt`), and commits the updated formula to
+`juan7732/homebrew-tap`. Homebrew users then `brew upgrade ergo`;
+standalone-binary users run `ergo update`.
+
+The version number comes **only** from the tag (embedded via ldflags) — there
+is no version constant to bump in code.
+
+### 1. Pick the version
+
+Semantic versioning against the previous tag (`git tag --sort=-v:refname`):
+
+- **minor** (`v0.2.0` → `v0.3.0`): new features, new config settings, new
+  commands — anything additive.
+- **patch** (`v0.2.0` → `v0.2.1`): bug fixes and doc-only corrections with no
+  behavior additions.
+- Backward-incompatible changes (config keys removed/renamed, command
+  semantics changed) warrant a minor bump while pre-1.0, and a prominent
+  "Breaking" section in the release notes.
+
+### 2. Write the release notes — before tagging
+
+Create `ergo-docs/release-notes/v<X.Y.Z>.md` **in the same PR as (or before)
+the last feature going into the release**, so the notes ship inside the tagged
+commit. Follow the conventions in
+[release-notes/README.md](release-notes/README.md).
+
+### 3. Land everything on `main` via PR
+
+Work happens on feature branches; `ci.yml` must be green (Test & Lint +
+dockerized Integration) before merge. Pre-flight locally:
+
 ```bash
-just release v0.2.0
-# tags v0.2.0 and pushes it, triggering .github/workflows/release.yml
+just check         # fmt + vet + test-race
+just integration   # dockerized end-to-end suite
 ```
 
-The tag push runs GoReleaser, which cross-compiles the matrix, publishes the
-GitHub release (raw `ergo-<os>-<arch>` binaries, `.tar.gz` archives, and
-`checksums.txt`), and commits the updated formula to `juan7732/homebrew-tap`.
-Homebrew users then `brew upgrade ergo`; standalone-binary users run
-`ergo update`.
-
-To dry-run the whole pipeline locally before tagging (requires `goreleaser` on
-PATH):
+Optionally dry-run the release pipeline itself (requires `goreleaser` on PATH):
 
 ```bash
 just release-check       # validate .goreleaser.yaml
 just release-snapshot    # build matrix + formula into dist/ without publishing
 ```
+
+### 4. Tag from a clean, up-to-date main
+
+```bash
+git checkout main && git pull    # HEAD must be the merge commit you mean to ship
+just release v0.3.0              # git tag + push → triggers release.yml
+```
+
+Watch the run: `gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')`.
+
+### 5. Attach the curated notes to the GitHub release
+
+GoReleaser generates a bare commit-list changelog as the release body. Replace
+it with the curated notes:
+
+```bash
+gh release edit v0.3.0 --notes-file ergo-docs/release-notes/v0.3.0.md
+```
+
+### 6. Verify
+
+- **Assets** — `gh release view v0.3.0 --json assets` should list 13 assets:
+  6 raw binaries, 6 archives, and `checksums.txt`.
+- **Homebrew tap** — the formula in
+  [`juan7732/homebrew-tap`](https://github.com/juan7732/homebrew-tap) shows the
+  new `version` and fresh SHA-256s (an automated
+  "Brew formula update for ergo version v0.3.0" commit).
+- **Upgrade path** — spot-check `brew upgrade ergo && ergo --version`, or
+  `ergo update` from a previous standalone binary.
+
+### If the release fails
+
+- **Workflow failed before publishing** (tests, build): fix on `main` via PR,
+  then delete and re-push the tag —
+  `git tag -d v0.3.0 && git push origin :refs/tags/v0.3.0`, retag with
+  `just release v0.3.0`.
+- **Release already published**: never reuse or move the tag — Homebrew and
+  `ergo update` have both seen the checksums. Cut a patch release instead.
