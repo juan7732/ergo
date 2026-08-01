@@ -28,6 +28,10 @@ type RepoStatusEntry struct {
 	Uncloned bool
 	// Group is the logical group from the TOML (empty string if unset).
 	Group string
+	// Tags are the repo's tags from the TOML (nil when none are defined).
+	// SPEC: ergo-vscode-spec.md §3.1 — status output carries tags so the
+	// extension can build its filter picker.
+	Tags []string
 }
 
 // GatherStatus gathers status for all repos defined in cfg.
@@ -42,13 +46,13 @@ func GatherStatus(cfg config.WorkspaceConfig, wsDir string, r git.Runner, parall
 
 	entries := make([]RepoStatusEntry, len(cfg.Repos))
 	for i, repo := range cfg.Repos {
-		entries[i] = RepoStatusEntry{Name: repo.EffectiveName(), Group: repo.Group}
+		entries[i] = RepoStatusEntry{Name: repo.EffectiveName(), Group: repo.Group, Tags: repo.Tags}
 	}
 
 	if !parallel || batchSize == 1 || len(cfg.Repos) == 0 {
 		for i, repo := range cfg.Repos {
 			dir := filepath.Join(wsDir, repo.EffectiveName())
-			entries[i] = gatherRepoStatus(repo.EffectiveName(), repo.Group, dir, r)
+			entries[i] = gatherRepoStatus(repo.EffectiveName(), repo.Group, repo.Tags, dir, r)
 		}
 		return entries, nil
 	}
@@ -65,7 +69,7 @@ func GatherStatus(cfg config.WorkspaceConfig, wsDir string, r git.Runner, parall
 			defer func() { <-sem }()
 
 			dir := filepath.Join(wsDir, repo.EffectiveName())
-			entry := gatherRepoStatus(repo.EffectiveName(), repo.Group, dir, r)
+			entry := gatherRepoStatus(repo.EffectiveName(), repo.Group, repo.Tags, dir, r)
 
 			mu.Lock()
 			entries[i] = entry
@@ -81,15 +85,16 @@ func GatherStatus(cfg config.WorkspaceConfig, wsDir string, r git.Runner, parall
 }
 
 // GatherSingleRepoStatus gathers status for a standalone repo at dir.
-// name is the display name and group is optional (pass empty string for standalone repos).
+// name is the display name and group is optional (pass empty string for
+// standalone repos). Standalone repos have no TOML entry, so Tags is nil.
 func GatherSingleRepoStatus(dir, name, group string, r git.Runner) RepoStatusEntry {
-	return gatherRepoStatus(name, group, dir, r)
+	return gatherRepoStatus(name, group, nil, dir, r)
 }
 
 // gatherRepoStatus collects the status of a single repo directory.
 // Git errors are absorbed: missing upstream → Behind 0, etc.
-func gatherRepoStatus(name, group, dir string, r git.Runner) RepoStatusEntry {
-	entry := RepoStatusEntry{Name: name, Group: group}
+func gatherRepoStatus(name, group string, tags []string, dir string, r git.Runner) RepoStatusEntry {
+	entry := RepoStatusEntry{Name: name, Group: group, Tags: tags}
 
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		entry.Uncloned = true
