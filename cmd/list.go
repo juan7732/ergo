@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/output"
 	"github.com/juan7732/ergo/internal/tui"
 )
 
@@ -21,16 +22,24 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
+	listCmd.Flags().Bool("json", false, "Print a machine-readable JSON document instead of the table")
 	rootCmd.AddCommand(listCmd)
 }
 
 func runList(cmd *cobra.Command, _ []string) error {
+	jsonOut, _ := cmd.Flags().GetBool("json")
+
 	names, err := config.ListWorkspaceNames()
 	if err != nil {
 		return fmt.Errorf("listing workspaces: %w", err)
 	}
 
 	if len(names) == 0 {
+		if jsonOut {
+			// Empty state is {"workspaces": []}, exit 0 — the hint text is
+			// for humans only.
+			return printJSON(cmd, output.NewList(nil))
+		}
 		fmt.Fprintln(cmd.OutOrStdout(), "no workspaces defined — run 'ergo init' to create one")
 		return nil
 	}
@@ -45,39 +54,39 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("expanding workspace root: %w", err)
 	}
 
-	type listRow struct {
-		name   string
-		repos  int
-		status string
-	}
-
-	rows := make([]listRow, 0, len(names))
+	rows := make([]output.ListWorkspace, 0, len(names))
 	for _, name := range names {
 		wsCfg, err := config.LoadWorkspace(name)
 		if err != nil {
 			// Skip unreadable configs with a warning rather than aborting.
+			// The warning goes to stderr in both output modes, so --json
+			// consumers still get a clean document on stdout.
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping %s: %v\n", name, err)
 			continue
 		}
 
-		status := "not synced"
+		synced := false
 		wsDir := filepath.Join(wsRoot, name)
 		if info, statErr := os.Stat(wsDir); statErr == nil && info.IsDir() {
-			status = "synced"
+			synced = true
 		}
 
-		rows = append(rows, listRow{
-			name:   name,
-			repos:  len(wsCfg.Repos),
-			status: status,
+		rows = append(rows, output.ListWorkspace{
+			Name:   name,
+			Repos:  len(wsCfg.Repos),
+			Synced: synced,
 		})
+	}
+
+	if jsonOut {
+		return printJSON(cmd, output.NewList(rows))
 	}
 
 	// Render as a table.
 	out := cmd.OutOrStdout()
 	wName, wRepos, wStatus := len("Workspace"), len("Repos"), len("Status")
 	for _, r := range rows {
-		if n := len(r.name); n > wName {
+		if n := len(r.Name); n > wName {
 			wName = n
 		}
 	}
@@ -98,15 +107,15 @@ func runList(cmd *cobra.Command, _ []string) error {
 	// column will visually misalign when ANSI is present. Fix in a follow-up by
 	// tracking visible width separately (e.g. via lipgloss.Width) and padding manually.
 	for _, r := range rows {
-		statusStr := r.status
-		if r.status == "synced" {
-			statusStr = tui.StyleSuccess.Render(r.status)
+		var statusStr string
+		if r.Synced {
+			statusStr = tui.StyleSuccess.Render("synced")
 		} else {
-			statusStr = tui.StyleSubtle.Render(r.status)
+			statusStr = tui.StyleSubtle.Render("not synced")
 		}
 		fmt.Fprintf(out, "│ %-*s │ %-*d │ %-*s │\n",
-			wName, r.name,
-			wRepos, r.repos,
+			wName, r.Name,
+			wRepos, r.Repos,
 			wStatus, statusStr,
 		)
 	}
