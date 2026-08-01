@@ -30,6 +30,13 @@ type ExecRunner struct{}
 // Stderr is included in the error message when the command fails.
 func (ExecRunner) Run(dir, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
+	// GIT_TERMINAL_PROMPT=0 makes git fail fast instead of opening /dev/tty to
+	// prompt for credentials — prompts would hang or interleave during parallel
+	// sync. Only ergo-initiated git commands run through ExecRunner; user
+	// commands from `ergo run` use workspace.runInDir and are unaffected.
+	// GIT_ASKPASS is deliberately left alone so non-interactive credential
+	// helpers (VS Code, git-credential-manager) keep working.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -53,6 +60,39 @@ func CheckPath() error {
 		return fmt.Errorf("git not found on PATH: install git and retry")
 	}
 	return nil
+}
+
+// authHint returns a one-line remediation hint for authentication failures,
+// or "" when err does not look auth-related.
+//
+// DECISION: hint detection lives here in the git package, next to the error
+// text it matches, so every caller (sync, open) benefits without touching
+// result rendering. Hints are single-line because sync progress output renders
+// each repo error on one line.
+func authHint(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "terminal prompts disabled"),
+		strings.Contains(msg, "could not read username"),
+		strings.Contains(msg, "could not read password"),
+		strings.Contains(msg, "authentication failed"):
+		return `(hint: git needs credentials for HTTPS; if you use SSH keys, set protocol = "ssh" under [git] in ~/.ergo/config.toml)`
+	case strings.Contains(msg, "permission denied (publickey"):
+		return `(hint: SSH auth failed; check ssh-agent and your key, or set protocol = "https" under [git] in ~/.ergo/config.toml)`
+	}
+	return ""
+}
+
+// withAuthHint appends the auth remediation hint to err's message when it
+// looks like an authentication failure, preserving the wrapped error.
+func withAuthHint(err error) error {
+	if h := authHint(err); h != "" {
+		return fmt.Errorf("%w %s", err, h)
+	}
+	return err
 }
 
 // Clone clones repoURL into destDir. If branch is non-empty, the given branch
@@ -82,12 +122,12 @@ func Clone(r Runner, repoURL, destDir, branch string) error {
 		}
 		retryArgs := []string{"clone", repoURL, destDir}
 		if _, retryErr := r.Run("", "git", retryArgs...); retryErr != nil {
-			return fmt.Errorf("cloning %s (retry without --branch): %w", repoURL, retryErr)
+			return withAuthHint(fmt.Errorf("cloning %s (retry without --branch): %w", repoURL, retryErr))
 		}
 		return nil
 	}
 
-	return fmt.Errorf("cloning %s: %w", repoURL, err)
+	return withAuthHint(fmt.Errorf("cloning %s: %w", repoURL, err))
 }
 
 // isRemoteBranchMissing reports whether err looks like git's "Remote branch X
@@ -110,7 +150,7 @@ func Pull(r Runner, dir string) error {
 		if isMissingUpstreamRef(err) {
 			return fmt.Errorf("pulling in %s: %w", dir, ErrEmptyRemote)
 		}
-		return fmt.Errorf("pulling in %s: %w", dir, err)
+		return withAuthHint(fmt.Errorf("pulling in %s: %w", dir, err))
 	}
 	return nil
 }

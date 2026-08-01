@@ -1,11 +1,14 @@
 package config
 
+import "strings"
+
 // GlobalConfig is the parsed representation of ~/.ergo/config.toml.
 type GlobalConfig struct {
 	Defaults DefaultsConfig `toml:"defaults"`
 	Parallel ParallelConfig `toml:"parallel"`
 	Sync     SyncConfig     `toml:"sync"`
 	Run      RunConfig      `toml:"run"`
+	Git      GitConfig      `toml:"git"`
 }
 
 // DefaultsConfig holds workspace and branch defaults.
@@ -28,6 +31,37 @@ type SyncConfig struct {
 // RunConfig controls ergo run behavior.
 type RunConfig struct {
 	ExcludedGroups []string `toml:"excluded_groups"`
+}
+
+// Accepted values for [git].protocol.
+const (
+	GitProtocolHTTPS = "https"
+	GitProtocolSSH   = "ssh"
+)
+
+// GitConfig controls how ergo invokes git.
+type GitConfig struct {
+	// Protocol selects the transport for ergo-initiated clones: "https" uses
+	// repo URLs exactly as written in the workspace TOML; "ssh" rewrites
+	// https:// URLs to scp form (git@host:owner/repo.git) in memory at clone
+	// time only — the stored TOML is never modified.
+	//
+	// DECISION: "https" (and unset) means "leave URLs untouched" rather than
+	// rewriting scp→https: that conversion is lossy (SSH host aliases from
+	// ~/.ssh/config, non-standard users, and port mappings cannot be reliably
+	// converted), and no-rewrite guarantees zero behavior change on upgrade.
+	Protocol string `toml:"protocol"`
+}
+
+// UseSSH reports whether repo URLs should be rewritten to SSH form.
+//
+// DECISION: an empty Protocol means "https" (no rewriting). Existing config
+// files decode into a zero-value GlobalConfig, so users without a [git]
+// section get "" here — treating that as https downstream keeps backward
+// compatibility without seeding the decode target with defaults (which would
+// silently change other absent settings).
+func (g GitConfig) UseSSH() bool {
+	return strings.EqualFold(strings.TrimSpace(g.Protocol), GitProtocolSSH)
 }
 
 // WorkspaceConfig is the parsed representation of ~/.ergo/workspaces/<name>.toml.

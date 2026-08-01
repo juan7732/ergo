@@ -30,7 +30,8 @@ Important behaviors:
 
 ## `internal/git`
 
-File: [`git.go`](../../ergo/internal/git/git.go)
+Files: [`git.go`](../../ergo/internal/git/git.go),
+[`url.go`](../../ergo/internal/git/url.go)
 
 Tiny adapter over the system `git` binary. The `Runner` interface is the
 **only preemptive abstraction** in the codebase — it exists solely to enable
@@ -38,7 +39,22 @@ unit tests with fakes (see [`git_test.go`](../../ergo/internal/git/git_test.go))
 
 `ExecRunner.Run` executes any binary, captures stdout & stderr separately,
 returns trimmed stdout, and on failure formats the stderr (or stdout if stderr
-empty) into the error message.
+empty) into the error message. It sets `GIT_TERMINAL_PROMPT=0` so git fails
+fast instead of opening `/dev/tty` to prompt for credentials — prompts would
+hang or interleave during parallel sync. `GIT_ASKPASS` is left alone so
+non-interactive credential helpers keep working. Only ergo-initiated git
+commands go through `ExecRunner`; user commands from `ergo run` use
+`workspace.runInDir` and are unaffected.
+
+When a clone/pull error looks auth-related (`authHint` matches strings like
+"terminal prompts disabled" or "Permission denied (publickey"), `Clone` and
+`Pull` append a one-line hint pointing at the `[git].protocol` setting.
+
+`RewriteToSSH(url)` in `url.go` converts plain-host http(s) URLs to scp form
+(`git@host:owner/repo.git`); everything else (ports, embedded credentials,
+non-http schemes, local paths) passes through unchanged. It is called from
+`workspace.syncRepo` when `SyncOptions.RewriteURLsToSSH` is set (from
+`[git].protocol = "ssh"`).
 
 Public functions:
 

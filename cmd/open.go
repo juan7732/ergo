@@ -103,10 +103,11 @@ func runOpen(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "creating workspace %q → %s\n\n", name, wsDir)
 
 		opts := workspace.SyncOptions{
-			WorkspaceDir: wsDir,
-			AutoPull:     false, // new workspace — only clone, no pull needed
-			Parallel:     globalCfg.Parallel.Enabled,
-			BatchSize:    globalCfg.Parallel.BatchSize,
+			WorkspaceDir:     wsDir,
+			AutoPull:         false, // new workspace — only clone, no pull needed
+			Parallel:         globalCfg.Parallel.Enabled,
+			BatchSize:        globalCfg.Parallel.BatchSize,
+			RewriteURLsToSSH: globalCfg.Git.UseSSH(),
 			Progress: func(repoName string, action workspace.RepoAction, syncErr error) {
 				if syncErr != nil {
 					fmt.Fprintf(out, "  ✗ %-30s %s\n", repoName, syncErr)

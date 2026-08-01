@@ -58,6 +58,7 @@ Rules of the graph (enforced informally):
 | `ParallelConfig`                     | `types.go`    | `enabled`, `batch_size`                                            |
 | `SyncConfig`                         | `types.go`    | `auto_pull`                                                        |
 | `RunConfig`                          | `types.go`    | `excluded_groups []string`                                         |
+| `GitConfig`                          | `types.go`    | `protocol` ("https"/"ssh"), `UseSSH()` helper                      |
 | `WorkspaceConfig`                    | `types.go`    | Parsed `~/.ergo/workspaces/<name>.toml`                            |
 | `WorkspaceMeta`                      | `types.go`    | `name` + nested `vscode.settings`                                  |
 | `Repo`                               | `types.go`    | `URL`, `*Name`, `*Branch`, `Tags`, `Group`, per-folder VS settings |
