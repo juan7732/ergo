@@ -9,6 +9,8 @@ import (
 
 	"github.com/juan7732/ergo/internal/config"
 	"github.com/juan7732/ergo/internal/git"
+	"github.com/juan7732/ergo/internal/output"
+	"github.com/juan7732/ergo/internal/vscode"
 	"github.com/juan7732/ergo/internal/workspace"
 )
 
@@ -63,4 +65,59 @@ func filterOptsFromFlags(cmd *cobra.Command, excludedGroups []string) (workspace
 		Tags:           tags,
 		ExcludedGroups: excludedGroups,
 	}, nil
+}
+
+// printJSON marshals doc through the output package and writes the single
+// JSON document to cmd's stdout. --json code paths must write nothing else
+// to stdout (warnings go to stderr as plain text).
+func printJSON(cmd *cobra.Command, doc any) error {
+	b, err := output.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	_, err = cmd.OutOrStdout().Write(b)
+	return err
+}
+
+// preservedFilter reads the active show filter recorded in the workspace
+// file at wsFilePath. Any error — file missing, unreadable, malformed JSON —
+// degrades to nil: filter recovery must never fail the calling operation
+// (ergo-vscode-spec.md §3.2), which then regenerates unfiltered, matching
+// pre-preservation behavior.
+func preservedFilter(wsFilePath string) *vscode.Filter {
+	f, err := vscode.ReadFilter(wsFilePath)
+	if err != nil {
+		return nil
+	}
+	return f
+}
+
+// showFilterOptions converts a preserved view filter into the FilterOptions
+// equivalent that ApplyRepoFilter understands.
+func showFilterOptions(f *vscode.Filter) workspace.FilterOptions {
+	if f == nil {
+		return workspace.FilterOptions{}
+	}
+	return workspace.FilterOptions{Name: f.Name, Group: f.Group, Tags: f.Tags}
+}
+
+// generateView renders the .code-workspace bytes for cfg as seen through an
+// optional preserved show filter: the folders list is filtered and the
+// filter stays recorded in the ergo object. A nil filter renders the full
+// view. Shared by sync and open so both preserve filters identically.
+func generateView(cfg config.WorkspaceConfig, f *vscode.Filter) ([]byte, error) {
+	if f == nil {
+		return vscode.Generate(cfg, nil)
+	}
+	viewCfg := cfg
+	viewCfg.Repos = workspace.ApplyRepoFilter(cfg.Repos, showFilterOptions(f))
+	return vscode.Generate(viewCfg, f)
+}
+
+// filterNote is the one-line notice sync, open, and human-format status
+// print when a preserved show filter is active, so a filtered view is never
+// silently in effect.
+func filterNote(f *vscode.Filter, visible, total int) string {
+	return fmt.Sprintf("note: show filter active (%s) — %d of %d repos visible; run 'ergo show all' to clear",
+		f.Describe(), visible, total)
 }
