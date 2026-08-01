@@ -8,6 +8,7 @@ import (
 
 	"github.com/juan7732/ergo/internal/config"
 	"github.com/juan7732/ergo/internal/git"
+	"github.com/juan7732/ergo/internal/output"
 	"github.com/juan7732/ergo/internal/tui"
 	"github.com/juan7732/ergo/internal/workspace"
 )
@@ -25,14 +26,16 @@ Exits with a non-zero status code if any issues are found.`,
 
 func init() {
 	validateCmd.Flags().Bool("all", false, "Validate all workspaces")
+	validateCmd.Flags().Bool("json", false, "Print a machine-readable JSON document instead of the report")
 	rootCmd.AddCommand(validateCmd)
 }
 
 func runValidate(cmd *cobra.Command, args []string) error {
 	all, _ := cmd.Flags().GetBool("all")
+	jsonOut, _ := cmd.Flags().GetBool("json")
 
 	if all {
-		return validateAll(cmd)
+		return validateAll(cmd, jsonOut)
 	}
 
 	nameArg := ""
@@ -45,15 +48,61 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if jsonOut {
+		doc := validateResult(name)
+		if err := printJSON(cmd, doc); err != nil {
+			return err
+		}
+		if !doc.Valid {
+			// Exit code semantics unchanged: non-zero when invalid. The
+			// document on stdout carries the detail; keep stderr terse.
+			return fmt.Errorf("validation failed")
+		}
+		return nil
+	}
+
 	return validateOne(cmd, name)
 }
 
+// validateResult loads and validates one workspace into the JSON document
+// shape. A TOML parse failure is represented as valid=false with a single
+// field-less error (see output.NewValidate).
+func validateResult(name string) output.Validate {
+	wsCfg, err := config.LoadWorkspace(name)
+	if err != nil {
+		return output.NewValidate(name, err)
+	}
+	return output.NewValidate(name, config.Validate(wsCfg))
+}
+
 // validateAll validates every workspace and prints all issues.
-func validateAll(cmd *cobra.Command) error {
+func validateAll(cmd *cobra.Command, jsonOut bool) error {
 	names, err := config.ListWorkspaceNames()
 	if err != nil {
 		return fmt.Errorf("listing workspaces: %w", err)
 	}
+
+	if jsonOut {
+		docs := make([]output.Validate, 0, len(names))
+		invalid := 0
+		for _, name := range names {
+			doc := validateResult(name)
+			if !doc.Valid {
+				invalid++
+			}
+			docs = append(docs, doc)
+		}
+		if err := printJSON(cmd, output.NewValidateAll(docs)); err != nil {
+			return err
+		}
+		if invalid > 0 {
+			return fmt.Errorf("validation failed for %d workspace(s)", invalid)
+		}
+		// DECISION: no workspaces defined emits {"workspaces": []} with
+		// exit 0, mirroring list --json's empty state.
+		return nil
+	}
+
 	if len(names) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "no workspaces defined")
 		return nil
