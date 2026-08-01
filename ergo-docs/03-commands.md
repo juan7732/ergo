@@ -214,6 +214,48 @@ path that would be removed.
 
 ---
 
+## `ergo config [workspace-name]`
+File: [`cmd/config.go`](../../ergo/cmd/config.go)
+
+Print a workspace's configuration to stdout. Read-only — the counterpart to
+`ergo edit`, which opens the TOML for modification.
+
+- Without flags: prints the workspace TOML **verbatim** (cat semantics — the
+  file is the source of truth; a re-rendered view would be a lossier copy).
+- Does not require the workspace to be materialized.
+
+### `ergo config --json`
+
+The configuration normalized to JSON (see [JSON output contract](#json-output-contract)):
+
+```json
+{
+  "workspace": "ml-projects",
+  "repos": [
+    {
+      "name": "handwriting-recognition",
+      "url": "https://github.com/juan/handwriting-recognition.git",
+      "tags": ["ml", "python"],
+      "group": "ml"
+    }
+  ],
+  "folders": [
+    { "name": "scratch", "git": false }
+  ]
+}
+```
+
+- `name` is the **effective** repo name (explicit `name` field, or derived
+  from the URL) — consumers never reimplement name derivation.
+- `tags` is always present (`[]` when unset); `group` is `""` when unset.
+- `repos` and `folders` are always present (`[]` when empty).
+- This is the config-facts counterpart to `status --json` (observed git
+  state): the VS Code extension reads folders and repo URLs from here.
+- Deliberately minimal: `branch` and `vscode_settings` are omitted until a
+  consumer needs them (additive contract — adding later is free).
+
+---
+
 ## `ergo edit [workspace-name]`
 File: [`cmd/edit.go`](../../ergo/cmd/edit.go)
 
@@ -419,7 +461,7 @@ embedded at build time via `-ldflags "-X main.version=..."` (defaults to `"dev"`
 
 ## JSON output contract
 
-`status`, `list`, `validate`, and `show` accept `--json`. This is the
+`status`, `list`, `validate`, `show`, and `config` accept `--json`. This is the
 machine-readable surface external tooling builds against — the ergo VS Code
 extension pins its minimum supported ergo version to the release that shipped
 it (`ergo-vscode-spec.md` §3).
@@ -453,6 +495,7 @@ schemas are documented in each command's section above:
 | `validate [ws] --json` | `{workspace, valid, errors[{field, message}]}`              |
 | `validate --all --json`| `{workspaces[<validate object>]}`                           |
 | `show --json`          | `{workspace, filter}` — filter is `{group?, tags?, name?}` or `null` |
+| `config [ws] --json`   | `{workspace, repos[{name, url, tags, group}], folders[{name, git}]}` |
 
 ---
 

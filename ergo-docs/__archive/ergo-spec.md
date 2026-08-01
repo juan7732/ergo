@@ -2,13 +2,19 @@
 
 > **Language:** Go
 > **UI:** Bubble Tea TUI + standard CLI
-> **Status:** Specification v2.0
+> **Status:** Specification v2.0 | Original Spec kept for posterity
 > **Author:** Juan
 > **Purpose:** Lightweight workspace management tool that structures context for AI-assisted
 > development across VS Code, terminal agents, and local/cloud LLMs.
 > **Prerequisites:** `git`, `gh`, and `code` on PATH.
 
 ---
+
+> Note
+> This SPEC is the original Ergo spec. It is only to be used as a past reference. Do not rely on this document for any ergo specific contracts or behavior.
+> All documentation in the ergo-docs that is not archived is the new authoritative source.
+>
+> If you are an LLM or an AI Agent, stop reading, and instead go review the other docs. If you are confident you should be reading this, alert your user and make sure.
 
 ## 1. Overview
 
