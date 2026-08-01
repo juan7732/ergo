@@ -44,6 +44,13 @@ Notes:
 - When `wsDir` exists but the TOML changed since last sync, `open` regenerates
   the `.code-workspace` but does **not** re-clone — that is `sync`'s job
   (`// REVIEW:` comment in source acknowledges spec is silent on this case).
+- **Preserves an active `show` filter.** The expected bytes in step 3 are
+  generated through the filter read from the existing file (`vscode.ReadFilter`),
+  so regeneration keeps the filtered folders list and the recorded
+  `ergo.filter`. When a filter is active, `open` prints the note line described
+  in [07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation)
+  (to stderr under `--print-dir`). A malformed workspace file falls back to
+  regenerating the full, unfiltered view.
 - Aborts with a friendly message if `code` is not on `$PATH` (unless
   `--print-dir` is set, in which case `code` is never invoked).
 
@@ -87,6 +94,14 @@ Behavior per folder:
 After repo/folder reconciliation, regenerates `.code-workspace` (smart-write)
 and reports orphans (directories on disk not in the TOML).
 
+**Sync preserves an active `show` filter.** Before regenerating, the filter
+recorded in the existing `.code-workspace` is read back and re-applied, so a
+filtered view survives sync. The filter is a **view concern only**: sync still
+clones/pulls every repo in the TOML — the operation set is governed solely by
+the explicit `--name`/`--group`/`--tags` flags. When a filter is active, sync
+prints a note line (see
+[07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation)).
+
 **Sync never deletes by default.** Orphans are listed; `--force` deletes them
 after a y/N confirmation prompt on stdin.
 
@@ -124,7 +139,42 @@ Status values shown:
 `Behind` column shows commits behind upstream from `git rev-list --count HEAD..@{u}`;
 displays `—` when zero or no upstream.
 
+When a `show` filter is recorded in the `.code-workspace`, table-format status
+prints the filter note line as a header (see
+[07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation)).
+`--short` and `--json` stay prose-free for machines.
+
 Filter flags: `--name`, `--group`, `--tags`.
+
+### `ergo status --json`
+
+Single JSON document on stdout (see [JSON output contract](#json-output-contract)):
+
+```json
+{
+  "workspace": "ml-projects",
+  "repos": [
+    {
+      "name": "handwriting-recognition",
+      "branch": "dev",
+      "dirty": true,
+      "behind": 3,
+      "uncloned": false,
+      "group": "ml",
+      "tags": ["ml", "python"]
+    }
+  ]
+}
+```
+
+- `tags` is always present (`[]` when the repo has none). It appears only in
+  the JSON — the human table and `--short` columns are unchanged.
+- Uncloned repos report `"branch": ""`, `"dirty": false`, `"behind": 0`.
+- Filter flags compose: `repos` reflects the filter; a filter matching nothing
+  yields `"repos": []` with exit 0.
+- **Standalone-repo mode** (run outside a workspace, inside a git repo) emits
+  the same shape with `"workspace": ""` and a single entry whose `group` is
+  `""` and `tags` is `[]`.
 
 ---
 
@@ -204,6 +254,22 @@ A `// REVIEW:` comment notes that ANSI escape bytes inflate `%-*s` padding for
 the status column when colors are enabled — visible misalignment is a known
 follow-up.
 
+### `ergo list --json`
+
+```json
+{
+  "workspaces": [
+    { "name": "ml-projects", "repos": 4, "synced": true }
+  ]
+}
+```
+
+- `synced` is the boolean form of the table's status column (directory exists
+  on disk).
+- Empty state is `{"workspaces": []}` with exit 0 — not the human hint text.
+- Unreadable workspace TOMLs are skipped with a plain-text warning on stderr
+  in both output modes.
+
 ---
 
 ## `ergo show [group | all]`
@@ -218,6 +284,7 @@ matching repos. Records the active filter in the `ergo` JSON object.
 | `ergo show --tag=<t>` (repeatable) | filter to repos tagged `<t>` (any-match) |
 | `ergo show all`                    | clear the active filter                  |
 | `ergo show` (no arg, no flag)      | TUI multi-select of groups+tags          |
+| `ergo show --json`                 | print the active filter, modify nothing  |
 
 Constraints:
 
@@ -227,6 +294,25 @@ Constraints:
 - Only `.code-workspace` is modified. Never the TOML, never the filesystem.
 - Always includes the `root` folder + all `[[folders]]` regardless of filter.
   (Filter applies to `[[repos]]` only.)
+- The recorded filter **persists across `sync` and `open`** — both re-apply it
+  when regenerating (see
+  [07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation)).
+
+### `ergo show --json` (read-only)
+
+With no positional group and no `--tag`, prints the currently active filter
+read from the `.code-workspace` (`vscode.ReadFilter`) and modifies nothing:
+
+```json
+{ "workspace": "ml-projects", "filter": { "group": "ml" } }
+```
+
+- `filter` is `null` when no filter is active.
+- A tag filter appears as `"filter": {"tags": ["go"]}`; consumers detect the
+  filter kind by key presence, mirroring the `ergo.filter` object itself.
+- Combining `--json` with a positional group or `--tag` (a mutating show) is
+  rejected with an error — there is no mutation-result document yet; one can
+  be added later without breaking this contract.
 
 ---
 
@@ -278,6 +364,27 @@ Run the validation rules listed in [02-configuration.md](02-configuration.md#col
 - `--all` validates every workspace under `~/.ergo/workspaces/`.
 - Returns non-zero on any failure.
 
+### `ergo validate --json`
+
+```json
+{
+  "workspace": "ml-projects",
+  "valid": false,
+  "errors": [
+    { "field": "repos[2]", "message": "derived name \"utils\" collides with repos[0]" }
+  ]
+}
+```
+
+- `errors` is always present — `[]` when valid.
+- A TOML that fails to **parse** (as opposed to failing validation) is
+  reported as `"valid": false` with a single error whose `field` is `""` and
+  whose `message` is the parse error.
+- `--all --json` emits `{"workspaces": [ <per-workspace object>, ... ]}`;
+  with no workspaces defined it is `{"workspaces": []}` with exit 0.
+- Exit code semantics are unchanged: non-zero when any workspace is invalid
+  (a terse `validation failed` goes to stderr; the detail is in the document).
+
 ---
 
 ## `ergo update`
@@ -307,6 +414,45 @@ Steps:
 
 Cobra's built-in version flag. Set in `cmd.Execute(v)`. The version string is
 embedded at build time via `-ldflags "-X main.version=..."` (defaults to `"dev"`).
+
+---
+
+## JSON output contract
+
+`status`, `list`, `validate`, and `show` accept `--json`. This is the
+machine-readable surface external tooling builds against — the ergo VS Code
+extension pins its minimum supported ergo version to the release that shipped
+it (`ergo-vscode-spec.md` §3).
+
+Invariants, for every `--json` command:
+
+1. **stdout is a single JSON document** — two-space indented, trailing
+   newline, no ANSI, no tables, no surrounding prose.
+2. **Warnings still go to stderr as plain text.** A consumer can always
+   `JSON.parse` stdout regardless of what appeared on stderr.
+3. **Exit codes are unchanged** from the non-JSON code paths (0 success,
+   1 failure — see [07-operational-semantics.md](07-operational-semantics.md#exit-codes)).
+4. **Schemas are stable contracts.** Field names never change or disappear
+   once shipped; evolution is **additive only**. Consumers must tolerate
+   unknown fields.
+5. Arrays are always present: empty is `[]`, never `null`. The one deliberate
+   `null` is `show`'s `filter` when no filter is active.
+
+The wire format is defined in
+[`internal/output/`](../../ergo/internal/output/output.go) as dedicated
+structs with explicit `json:` tags, converted from internal types via
+constructors — internal refactors cannot silently change the contract.
+Golden-byte tests in `output_test.go` and the integration suite
+(`test/integration/json_output_test.go`) pin the exact shapes. Per-command
+schemas are documented in each command's section above:
+
+| Command                | Document                                                    |
+| ---------------------- | ----------------------------------------------------------- |
+| `status [ws] --json`   | `{workspace, repos[{name, branch, dirty, behind, uncloned, group, tags}]}` |
+| `list --json`          | `{workspaces[{name, repos, synced}]}`                       |
+| `validate [ws] --json` | `{workspace, valid, errors[{field, message}]}`              |
+| `validate --all --json`| `{workspaces[<validate object>]}`                           |
+| `show --json`          | `{workspace, filter}` — filter is `{group?, tags?, name?}` or `null` |
 
 ---
 
