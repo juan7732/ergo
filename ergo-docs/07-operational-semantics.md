@@ -156,7 +156,7 @@ produce a non-zero exit by returning a wrapped error from `RunE`.
 
 - All user-visible output goes to **stdout** (`cmd.OutOrStdout()`).
 - Warnings (state save failures, orphan-scan errors) go to **stderr**.
-- Under `--json` (status/list/validate/show), stdout carries exactly one JSON
+- Under `--json` (status/list/validate/show/config), stdout carries exactly one JSON
   document and nothing else; warnings stay plain text on stderr. See the
   [JSON output contract](03-commands.md#json-output-contract).
 - No structured logging library — `fmt.Fprintf` everywhere.

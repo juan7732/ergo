@@ -157,6 +157,62 @@ func NewValidateAll(workspaces []Validate) ValidateAll {
 	return ValidateAll{Workspaces: workspaces}
 }
 
+// ─── ergo config --json ───────────────────────────────────────────────────────
+
+// ConfigRepo is one [[repos]] entry in the config document.
+// Name is the effective name (explicit or URL-derived) — the normalization
+// consumers cannot do without reimplementing DeriveRepoName.
+type ConfigRepo struct {
+	Name  string   `json:"name"`
+	URL   string   `json:"url"`
+	Tags  []string `json:"tags"`
+	Group string   `json:"group"`
+}
+
+// ConfigFolder is one [[folders]] entry in the config document.
+type ConfigFolder struct {
+	Name string `json:"name"`
+	Git  bool   `json:"git"`
+}
+
+// Config is the document printed by `ergo config [ws] --json`: the workspace
+// TOML normalized to JSON.
+//
+// DECISION: deliberately minimal — effective name, url, tags, group per repo
+// and name, git per folder. branch and vscode_settings are omitted until a
+// consumer needs them; the contract is additive, so adding costs nothing
+// later while shipping them now would be a permanent commitment.
+type Config struct {
+	Workspace string         `json:"workspace"`
+	Repos     []ConfigRepo   `json:"repos"`
+	Folders   []ConfigFolder `json:"folders"`
+}
+
+// NewConfig builds the config document from a parsed workspace TOML.
+func NewConfig(workspaceName string, cfg config.WorkspaceConfig) Config {
+	doc := Config{
+		Workspace: workspaceName,
+		Repos:     make([]ConfigRepo, 0, len(cfg.Repos)),
+		Folders:   make([]ConfigFolder, 0, len(cfg.Folders)),
+	}
+	for _, r := range cfg.Repos {
+		tags := r.Tags
+		if tags == nil {
+			tags = []string{}
+		}
+		doc.Repos = append(doc.Repos, ConfigRepo{
+			Name:  r.EffectiveName(),
+			URL:   r.URL,
+			Tags:  tags,
+			Group: r.Group,
+		})
+	}
+	for _, f := range cfg.Folders {
+		doc.Folders = append(doc.Folders, ConfigFolder{Name: f.Name, Git: f.Git})
+	}
+	return doc
+}
+
 // ─── ergo show --json ─────────────────────────────────────────────────────────
 
 // ShowFilter mirrors the ergo.filter object recorded in the .code-workspace.

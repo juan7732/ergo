@@ -263,6 +263,77 @@ url = "https://github.com/two/utils.git"
 	assert.Equal(t, map[string]bool{"good": true, "bad": false, "broken": false}, valids)
 }
 
+func TestConfigCommand(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+
+	type configDoc struct {
+		Workspace string `json:"workspace"`
+		Repos     []struct {
+			Name  string   `json:"name"`
+			URL   string   `json:"url"`
+			Tags  []string `json:"tags"`
+			Group string   `json:"group"`
+		} `json:"repos"`
+		Folders []struct {
+			Name string `json:"name"`
+			Git  bool   `json:"git"`
+		} `json:"folders"`
+	}
+
+	toml := `
+[workspace]
+name = "ws"
+
+[[repos]]
+url = "https://github.com/juan/handwriting-recognition.git"
+tags = ["ml", "python"]
+group = "ml"
+
+[[repos]]
+url = "https://github.com/other-org/utils.git"
+name = "utils-other"
+
+[[folders]]
+name = "scratch"
+
+[[folders]]
+name = "planning"
+git = true
+`
+	h.WriteWorkspaceTOML("ws", toml)
+
+	// Default form prints the TOML verbatim (no materialization needed).
+	res := h.Run("config", "ws")
+	res.AssertOK(t)
+	assert.Equal(t, toml, res.Stdout)
+
+	// --json normalizes: derived + explicit names, tags [] when unset.
+	res = h.Run("config", "ws", "--json")
+	res.AssertOK(t)
+	var doc configDoc
+	mustParseJSON(t, res.Stdout, &doc)
+
+	assert.Equal(t, "ws", doc.Workspace)
+	require.Len(t, doc.Repos, 2)
+	assert.Equal(t, "handwriting-recognition", doc.Repos[0].Name, "name derived from URL")
+	assert.Equal(t, "https://github.com/juan/handwriting-recognition.git", doc.Repos[0].URL)
+	assert.Equal(t, []string{"ml", "python"}, doc.Repos[0].Tags)
+	assert.Equal(t, "ml", doc.Repos[0].Group)
+	assert.Equal(t, "utils-other", doc.Repos[1].Name, "explicit name wins")
+	assert.Equal(t, []string{}, doc.Repos[1].Tags, "tags must be [], not null")
+	assert.Equal(t, "", doc.Repos[1].Group)
+	require.Len(t, doc.Folders, 2)
+	assert.Equal(t, "scratch", doc.Folders[0].Name)
+	assert.False(t, doc.Folders[0].Git)
+	assert.Equal(t, "planning", doc.Folders[1].Name)
+	assert.True(t, doc.Folders[1].Git)
+
+	// Unknown workspace errors in both forms.
+	h.Run("config", "nope").AssertFail(t)
+	h.Run("config", "nope", "--json").AssertFail(t)
+}
+
 func TestShowJSON_ReadOnly(t *testing.T) {
 	t.Parallel()
 	h := harness.New(t)

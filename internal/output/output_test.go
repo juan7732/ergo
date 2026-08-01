@@ -249,6 +249,86 @@ func TestMarshal_ValidateAll_Golden(t *testing.T) {
 	assert.Equal(t, "{\n  \"workspaces\": []\n}\n", string(empty))
 }
 
+func TestMarshal_Config_Golden(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  Config
+		want string
+	}{
+		{
+			name: "repos and folders with derived and explicit names",
+			doc: NewConfig("ml-projects", config.WorkspaceConfig{
+				Repos: []config.Repo{
+					{
+						URL:   "https://github.com/juan/handwriting-recognition.git",
+						Tags:  []string{"ml", "python"},
+						Group: "ml",
+					},
+					{
+						URL:  "https://github.com/other-org/utils.git",
+						Name: ptrStr("utils-other"),
+					},
+				},
+				Folders: []config.Folder{
+					{Name: "scratch"},
+					{Name: "planning", Git: true},
+				},
+			}),
+			want: `{
+  "workspace": "ml-projects",
+  "repos": [
+    {
+      "name": "handwriting-recognition",
+      "url": "https://github.com/juan/handwriting-recognition.git",
+      "tags": [
+        "ml",
+        "python"
+      ],
+      "group": "ml"
+    },
+    {
+      "name": "utils-other",
+      "url": "https://github.com/other-org/utils.git",
+      "tags": [],
+      "group": ""
+    }
+  ],
+  "folders": [
+    {
+      "name": "scratch",
+      "git": false
+    },
+    {
+      "name": "planning",
+      "git": true
+    }
+  ]
+}
+`,
+		},
+		{
+			name: "empty workspace: arrays present and empty",
+			doc:  NewConfig("bare", config.WorkspaceConfig{}),
+			want: `{
+  "workspace": "bare",
+  "repos": [],
+  "folders": []
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Marshal(tt.doc)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(got))
+		})
+	}
+}
+
+func ptrStr(s string) *string { return &s }
+
 func TestMarshal_Show_Golden(t *testing.T) {
 	tests := []struct {
 		name string
