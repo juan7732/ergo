@@ -22,6 +22,9 @@ auto_pull = true                        # if false, sync only clones missing rep
 
 [run]
 excluded_groups = []                    # groups skipped by `ergo run` unless overridden
+
+[git]
+protocol = "https"                      # "ssh" rewrites https repo URLs to SSH form at clone time
 ```
 
 Implementation:
@@ -29,6 +32,36 @@ Implementation:
 - `LoadGlobal()` reads the file or writes defaults if it doesn't exist.
 - `defaultGlobalConfig()` returns the canonical defaults shown above.
 - File is created with mode `0600`, parent dir with `0700`.
+
+### `[git].protocol`
+
+Controls the transport used for ergo-initiated clones:
+
+- `"https"` (default, also used when the key or section is absent): repo URLs
+  are passed to `git clone` exactly as written in the workspace TOML. No
+  rewriting in either direction — scp-style URLs stay scp-style.
+- `"ssh"`: `https://` / `http://` URLs are rewritten to scp form
+  (`https://github.com/o/r.git` → `git@github.com:o/r.git`) **in memory at
+  clone time only**. The stored workspace TOML is never modified. Works for any
+  host (GitHub, GitLab, Bitbucket, self-hosted). URLs that cannot be safely
+  rewritten pass through unchanged: URLs with an explicit port or embedded
+  credentials, and anything that is not a plain http(s) URL (`ssh://`, `git://`,
+  `file://`, local paths, already-scp forms). Implemented by `RewriteToSSH` in
+  [`internal/git/url.go`](../../ergo/internal/git/url.go).
+
+Notes:
+
+- **Existing clones keep their original `origin` remote** — the rewrite applies
+  at clone time only, and `sync` pulls via the clone's configured remote. To
+  migrate an existing checkout, run
+  `git remote set-url origin git@github.com:owner/repo.git` in the repo, or
+  delete the directory and re-sync.
+- Ergo-initiated git commands run with `GIT_TERMINAL_PROMPT=0`, so a repo that
+  needs credentials fails fast with a per-repo error and a remediation hint
+  (instead of a hung username prompt during parallel sync). Non-interactive
+  credential helpers (VS Code, git-credential-manager) are unaffected.
+- Rare edge: an SSH key with a passphrase and no ssh-agent will still make git
+  wait on the ssh prompt; add the key to your agent (`ssh-add`) to avoid this.
 
 The exported helpers `config.ErgoHome()` and `config.ExpandTilde(path)` are
 used by callers outside the package (e.g. [`cmd/edit.go`](../../ergo/cmd/edit.go),

@@ -89,10 +89,66 @@ func TestLoadGlobal_CreatesDefaultWhenMissing(t *testing.T) {
 	assert.True(t, cfg.Parallel.Enabled)
 	assert.Equal(t, 4, cfg.Parallel.BatchSize)
 	assert.True(t, cfg.Sync.AutoPull)
+	assert.Equal(t, GitProtocolHTTPS, cfg.Git.Protocol)
 
-	// Config file must have been created.
-	_, statErr := os.Stat(filepath.Join(tmp, ".ergo", "config.toml"))
-	assert.NoError(t, statErr)
+	// Config file must have been created and self-document the [git] section.
+	body, readErr := os.ReadFile(filepath.Join(tmp, ".ergo", "config.toml"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(body), "[git]")
+}
+
+// TestLoadGlobal_MissingGitSectionMeansHTTPS is a regression test for the
+// zero-value gotcha: existing config files without a [git] section must decode
+// to "no SSH rewriting", not an error or surprise rewrite.
+func TestLoadGlobal_MissingGitSectionMeansHTTPS(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	dir := filepath.Join(tmp, ".ergo")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	body := "[defaults]\nworkspace_root = \"~/ergo-workspaces\"\ndefault_branch = \"main\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600))
+
+	cfg, err := LoadGlobal()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Git.Protocol)
+	assert.False(t, cfg.Git.UseSSH())
+}
+
+// TestLoadGlobal_RejectsInvalidGitProtocol verifies unknown protocol values
+// fail fast with a clear error.
+func TestLoadGlobal_RejectsInvalidGitProtocol(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	dir := filepath.Join(tmp, ".ergo")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	body := "[git]\nprotocol = \"carrier-pigeon\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600))
+
+	_, err := LoadGlobal()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "carrier-pigeon")
+	assert.Contains(t, err.Error(), "[git]")
+}
+
+// TestGitConfig_UseSSH covers the protocol → rewrite-enabled mapping.
+func TestGitConfig_UseSSH(t *testing.T) {
+	tests := []struct {
+		protocol string
+		want     bool
+	}{
+		{"", false},
+		{"https", false},
+		{"ssh", true},
+		{"SSH ", true},
+		{" Ssh", true},
+	}
+	for _, tc := range tests {
+		t.Run("protocol="+tc.protocol, func(t *testing.T) {
+			assert.Equal(t, tc.want, GitConfig{Protocol: tc.protocol}.UseSSH())
+		})
+	}
 }
 
 // TestLoadGlobal_RoundTrip verifies that a written config can be read back.

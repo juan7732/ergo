@@ -118,11 +118,12 @@ func executeSync(cmd *cobra.Command, name string, p syncParams) error {
 	fmt.Fprintf(out, "syncing workspace %q → %s\n\n", name, wsDir)
 
 	opts := workspace.SyncOptions{
-		WorkspaceDir: wsDir,
-		AutoPull:     globalCfg.Sync.AutoPull,
-		Parallel:     globalCfg.Parallel.Enabled,
-		BatchSize:    globalCfg.Parallel.BatchSize,
-		KnownNames:   knownNames,
+		WorkspaceDir:     wsDir,
+		AutoPull:         globalCfg.Sync.AutoPull,
+		Parallel:         globalCfg.Parallel.Enabled,
+		BatchSize:        globalCfg.Parallel.BatchSize,
+		RewriteURLsToSSH: globalCfg.Git.UseSSH(),
+		KnownNames:       knownNames,
 		Progress: func(repoName string, action workspace.RepoAction, syncErr error) {
 			if syncErr != nil {
 				fmt.Fprintf(out, "  ✗ %-30s %s\n", repoName, syncErr)

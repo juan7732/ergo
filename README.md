@@ -104,7 +104,15 @@ auto_pull = true
 
 [run]
 excluded_groups = []
+
+[git]
+protocol = "https"
 ```
+
+Set `protocol = "ssh"` if you authenticate to git hosts with SSH keys: ergo
+then rewrites `https://` repo URLs to SSH form (`git@host:owner/repo.git`)
+in memory at clone time, so you're never prompted for a username. The stored
+workspace TOML is not modified, and non-http(s) URLs pass through unchanged.
 
 ### Workspace config (`~/.ergo/workspaces/<name>.toml`)
 

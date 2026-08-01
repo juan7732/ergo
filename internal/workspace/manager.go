@@ -64,6 +64,15 @@ type SyncOptions struct {
 	// AutoPull controls whether an existing repo is pulled (fetch + pull) or
 	// just skipped. Comes from [sync].auto_pull in global config.
 	AutoPull bool
+	// RewriteURLsToSSH rewrites https repo URLs to scp-style SSH form at clone
+	// time. Comes from [git].protocol == "ssh" in global config. The rewrite is
+	// in-memory only — the stored workspace TOML is never modified.
+	//
+	// DECISION: already-cloned repos keep their existing origin remote (Pull
+	// uses the clone's remote, not the TOML URL). Mutating user checkouts via
+	// `git remote set-url` would be surprising; users can migrate manually or
+	// delete + re-sync. A future `sync --fix-remotes` could automate this.
+	RewriteURLsToSSH bool
 	// Parallel enables concurrent operations when true.
 	Parallel bool
 	// BatchSize caps the number of concurrent operations. Ignored when Parallel
@@ -208,7 +217,11 @@ func syncRepo(repo config.Repo, opts SyncOptions, r git.Runner) RepoResult {
 		if repo.Branch != nil {
 			branch = *repo.Branch
 		}
-		if cloneErr := git.Clone(r, repo.URL, dir, branch); cloneErr != nil {
+		cloneURL := repo.URL
+		if opts.RewriteURLsToSSH {
+			cloneURL = git.RewriteToSSH(cloneURL)
+		}
+		if cloneErr := git.Clone(r, cloneURL, dir, branch); cloneErr != nil {
 			return RepoResult{Name: name, Action: RepoActionFailed, Err: cloneErr}
 		}
 		return RepoResult{Name: name, Action: RepoActionCloned}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -36,6 +37,9 @@ func defaultGlobalConfig() GlobalConfig {
 		Run: RunConfig{
 			ExcludedGroups: []string{},
 		},
+		Git: GitConfig{
+			Protocol: GitProtocolHTTPS,
+		},
 	}
 }
 
@@ -63,6 +67,11 @@ func LoadGlobal() (GlobalConfig, error) {
 	var cfg GlobalConfig
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return GlobalConfig{}, fmt.Errorf("parsing global config %s: %w", path, err)
+	}
+	if p := strings.TrimSpace(cfg.Git.Protocol); p != "" &&
+		!strings.EqualFold(p, GitProtocolHTTPS) && !strings.EqualFold(p, GitProtocolSSH) {
+		return GlobalConfig{}, fmt.Errorf("invalid [git] protocol %q in %s: must be %q or %q",
+			p, path, GitProtocolSSH, GitProtocolHTTPS)
 	}
 	return cfg, nil
 }

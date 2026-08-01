@@ -54,6 +54,35 @@ func TestClone_PropagatesError(t *testing.T) {
 	assert.Contains(t, err.Error(), "cloning https://github.com/example/repo.git")
 }
 
+func TestClone_AppendsHintOnHTTPSAuthFailure(t *testing.T) {
+	r := &captureRunner{err: errors.New("fatal: could not read Username for 'https://github.com': terminal prompts disabled: exit status 128")}
+	err := Clone(r, "https://github.com/example/repo.git", "/tmp/repo", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `protocol = "ssh"`)
+	assert.Contains(t, err.Error(), "[git]")
+}
+
+func TestClone_NoHintOnUnrelatedError(t *testing.T) {
+	r := &captureRunner{err: errors.New("fatal: repository not found: exit status 128")}
+	err := Clone(r, "https://github.com/example/repo.git", "/tmp/repo", "")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "hint")
+}
+
+func TestPull_AppendsHintOnSSHPermissionDenied(t *testing.T) {
+	r := &captureRunner{err: errors.New("git@github.com: Permission denied (publickey).: exit status 128")}
+	err := Pull(r, "/tmp/repo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ssh-agent")
+	assert.Contains(t, err.Error(), `protocol = "https"`)
+}
+
+func TestExecRunner_SetsGitTerminalPrompt0(t *testing.T) {
+	out, err := ExecRunner{}.Run("", "sh", "-c", "echo $GIT_TERMINAL_PROMPT")
+	require.NoError(t, err)
+	assert.Equal(t, "0", out)
+}
+
 // multiCallRunner records each Run call and returns scripted responses.
 type multiCallRunner struct {
 	calls   [][]string
