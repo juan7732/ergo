@@ -52,8 +52,11 @@ Once detected:
 - `workspace.Sync(syncCfg, opts, runner)` — bounded-parallel
   clone/pull, sequential folder processing, orphan scan.
 - `workspace.SaveState(state)` after the sync.
-- `vscode.Generate(...)` + `vscode.WriteIfChanged(...)` regenerates the
-  `.code-workspace` only if the bytes changed.
+- `vscode.ReadFilter(...)` recovers any active `show` filter from the existing
+  file; `vscode.Generate(...)` + `vscode.WriteIfChanged(...)` then regenerate
+  the `.code-workspace` (through the filter, if one was active) only if the
+  bytes changed. A note line surfaces the preserved filter — see
+  [07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation).
 - Orphans are reported (and optionally deleted with `--force`).
 
 ---
@@ -103,6 +106,14 @@ $ ergo show all     # restore full view
 The state is "carried" by the file itself: re-running `ergo show ml` on a
 workspace that already has the filter results in `WriteIfChanged` returning
 `(false, nil)` and the user seeing `"filter already set to group ml"`.
+
+The filter genuinely persists across the daily workflow: `sync` and `open`
+read it back (`vscode.ReadFilter`) and re-apply it when they regenerate the
+file, printing a note line while it is active. Hidden repos are still synced —
+the filter only shapes the VS Code view
+([07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation)).
+Tooling can query the active filter without touching the file semantics via
+`ergo show --json` (`filter` is `null` when none is active).
 
 ---
 

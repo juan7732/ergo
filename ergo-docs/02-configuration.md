@@ -190,6 +190,21 @@ Behavior:
 - `commit_hash` is currently unpopulated (TODO in source — the value is not yet
   consumed by any reader).
 
+## Derived artifact — `<name>.code-workspace`
+
+The workspace file is generated from the TOML (`vscode.Generate`) and never
+edited by hand. Its top-level `ergo` object carries two pieces of metadata:
+
+- `workspace-name` — maps the file back to `~/.ergo/workspaces/<name>.toml`.
+- `filter` — the active `ergo show` view filter (`{group}`, `{tags}`, or
+  `{name}`), present only while a filter is active.
+
+`filter` is durable state: `sync` and `open` read it back
+(`vscode.ReadFilter`) and re-apply it when regenerating, so the filtered view
+survives until `ergo show all` clears it. It affects only the generated
+folders list — never which repos are synced, validated, or deleted. See
+[07-operational-semantics.md](07-operational-semantics.md#show-filter-preservation).
+
 ## Path conventions
 
 | Path                                             | Owner / Mode | Created by                            |

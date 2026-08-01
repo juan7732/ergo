@@ -31,6 +31,42 @@ This avoids file-change events in VS Code that would trigger restarts of
 language servers, file watchers, etc. It also makes the workspace file
 diff-friendly under version control.
 
+## Show-filter preservation
+
+An active `ergo show` filter is recorded in the `.code-workspace` under
+`ergo.filter`. Any command that regenerates the file **preserves** it:
+
+1. `vscode.ReadFilter(path)` reads the recorded filter back (tolerating
+   unknown fields).
+2. The folders list is filtered through `workspace.ApplyRepoFilter` and the
+   filter is passed back into `vscode.Generate`, so it stays recorded.
+3. `open`'s fast-path currency check compares against the *filtered* expected
+   bytes, so a filtered file is not treated as stale.
+
+Semantics:
+
+- **The filter is purely a view concern.** `sync` still operates on the full
+  TOML — repos hidden by the filter are still cloned and pulled. The
+  operation set is governed only by the explicit `--name`/`--group`/`--tags`
+  flags. (Destruction scope, likewise, is always computed from the full
+  config.)
+- **Surfaced, never silent.** When a preserved filter is active, `sync` and
+  `open` print one note line, and table-format `status` shows it as a header:
+
+  ```
+  note: show filter active (group "ml") — 3 of 12 repos visible; run 'ergo show all' to clear
+  ```
+
+  The note goes to stderr under `open --print-dir` (stdout stays clean for
+  shell capture). It is **not** added to `--json` output — JSON consumers
+  read the filter from `ergo show --json`.
+- **Fail-open.** A malformed or unreadable workspace file degrades to the
+  pre-preservation behavior: regenerate the full, unfiltered view. Filter
+  recovery never fails a sync or open.
+- A filter that no longer matches any repo is still preserved (the note line
+  reads `0 of N repos visible`); clearing it is the user's call via
+  `ergo show all`.
+
 ## Never deletes by default
 
 | Command           | Default behavior         | Destructive variant                      |
@@ -120,6 +156,9 @@ produce a non-zero exit by returning a wrapped error from `RunE`.
 
 - All user-visible output goes to **stdout** (`cmd.OutOrStdout()`).
 - Warnings (state save failures, orphan-scan errors) go to **stderr**.
+- Under `--json` (status/list/validate/show), stdout carries exactly one JSON
+  document and nothing else; warnings stay plain text on stderr. See the
+  [JSON output contract](03-commands.md#json-output-contract).
 - No structured logging library — `fmt.Fprintf` everywhere.
 - Color is enabled by default; the persistent `--no-color` flag is registered
   on the root command but currently unwired (`// REVIEW`-worthy).

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/juan7732/ergo/internal/config"
+	"github.com/juan7732/ergo/internal/output"
 	"github.com/juan7732/ergo/internal/tui"
 	"github.com/juan7732/ergo/internal/vscode"
 	"github.com/juan7732/ergo/internal/workspace"
@@ -24,6 +25,7 @@ object so it persists between runs.
   ergo show --tag=go     # filter to repos tagged "go"
   ergo show all          # clear the filter, restore full view
   ergo show              # interactive group/tag selector
+  ergo show --json       # print the active filter as JSON (read-only)
 
 Modifies .code-workspace only — never the TOML or filesystem.
 The workspace must be materialized on disk (run 'ergo open' first).
@@ -35,12 +37,22 @@ ergo show operates on the workspace detected from the current working directory.
 
 func init() {
 	showCmd.Flags().StringSlice("tag", nil, "Filter repos by tag (can be repeated or comma-separated)")
+	showCmd.Flags().Bool("json", false, "Print the currently active filter as JSON without modifying anything")
 	rootCmd.AddCommand(showCmd)
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
 	tags, _ := cmd.Flags().GetStringSlice("tag")
+	jsonOut, _ := cmd.Flags().GetBool("json")
 	out := cmd.OutOrStdout()
+
+	// DECISION: --json is read-only for now — combining it with a positional
+	// group or --tag (a mutating show) is rejected rather than inventing a
+	// mutation-result document. A mutating-JSON shape can be added later
+	// without breaking this contract.
+	if jsonOut && (len(args) > 0 || len(tags) > 0) {
+		return fmt.Errorf("--json is read-only and prints the active filter; it cannot be combined with a group argument or --tag")
+	}
 
 	// show always operates on the workspace detected from CWD — the positional
 	// arg is reserved for the group name, not a workspace name.
@@ -76,6 +88,16 @@ func runShow(cmd *cobra.Command, args []string) error {
 	wsFilePath := filepath.Join(wsDir, name+".code-workspace")
 	if _, statErr := os.Stat(wsFilePath); os.IsNotExist(statErr) {
 		return fmt.Errorf("workspace not materialized; run 'ergo open %s' first", name)
+	}
+
+	// Read-only mode: print the active filter from the .code-workspace and
+	// modify nothing. filter is null when none is active.
+	if jsonOut {
+		f, readErr := vscode.ReadFilter(wsFilePath)
+		if readErr != nil {
+			return fmt.Errorf("reading active filter: %w", readErr)
+		}
+		return printJSON(cmd, output.NewShow(name, f))
 	}
 
 	// Determine the filter from args, flags, or TUI.
