@@ -82,6 +82,7 @@ This documentation set is organized into focused topic files:
 8. [08-build-test-release.md](08-build-test-release.md) — justfile, CI, release pipeline, integration suite.
 9. [09-design-tenets.md](09-design-tenets.md) — distilled tenets that constrain every feature.
 10. [10-extension-points.md](10-extension-points.md) — v2 candidates and where they would slot in.
+11. [11-roadmap.md](11-roadmap.md) — committed, exploring, and rejected future work; implementation plans in [plans/](plans/).
 
 Per-version release notes live in [release-notes/](release-notes/) (one file
 per released tag, e.g. [release-notes/v0.2.0.md](release-notes/v0.2.0.md));
