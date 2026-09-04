@@ -5,7 +5,8 @@
 #   - a raw binary asset named ergo-<goos>-<goarch> (.exe on Windows), consumed by `ergo update`
 #   - an archive: .tar.gz (Unix) / .zip (Windows); the Homebrew formula uses the Unix ones
 #   - a single checksums.txt covering every asset, verified by `ergo update`
-# and publishes a GitHub release plus a formula commit to juan7732/homebrew-tap.
+# and publishes a GitHub release, a formula commit to juan7732/homebrew-tap, and
+# a winget manifest pull request to microsoft/winget-pkgs (via the juan7732 fork).
 version: 2
 
 project_name: ergo
@@ -100,3 +101,80 @@ brews:
       Install them if you use those commands:
         brew install gh
         # VS Code: enable the `code` command via "Shell Command: Install 'code' command in PATH"
+
+# DECISION: ergo ships to winget as a *portable* package built from the existing
+# Windows zip archives (ids: [archive]). goreleaser emits InstallerType: zip with
+# NestedInstallerType: portable and PortableCommandAlias: ergo, so `winget
+# install juan7732.ergo` puts an `ergo` command on PATH with no installer
+# framework (MSI/NSIS are goreleaser Pro features and would be a second Windows
+# artifact to maintain). Nothing existing is renamed: the raw .exe assets stay
+# the `ergo update` contract and the zips already exist on every release.
+#
+# DECISION: the first winget-pkgs pull request is opened by goreleaser on the
+# next tag rather than seeded by hand with wingetcreate. The winget-pkgs docs
+# accept any of wingetcreate, YAMLCreate, or hand-written manifests for a new
+# package (no first-submission tooling rule), goreleaser produces the same
+# three-file 1.x manifest set, and a hand-seeded manifest would have to match
+# goreleaser's identifier, path, and installer layout exactly or the second
+# release would diverge from the first. wingetcreate is also Windows-only.
+# Cost of this choice: the first PR needs human moderation (new packages get
+# extra scrutiny and can take days); see 08-build-test-release.md.
+#
+# Prerequisites outside this file: a fork juan7732/winget-pkgs must exist, and
+# WINGET_PKGS_TOKEN must be a *classic* PAT with the public_repo scope (a
+# fine-grained token cannot open pull requests on repositories outside its
+# owner, and microsoft/winget-pkgs is one).
+winget:
+  - name: ergo
+    # Publisher.Package identifier per winget conventions. The GitHub username
+    # is the publisher (no organization exists) and the manifests land under
+    # manifests/j/juan7732/ergo/<version>/ in winget-pkgs.
+    package_identifier: juan7732.ergo
+    publisher: juan7732
+    publisher_url: "https://github.com/juan7732"
+    publisher_support_url: "https://github.com/juan7732/ergo/issues"
+    # Only the zip archives: mixing the raw .exe binaries (archive id "binary")
+    # in would make goreleaser reject the set as mixed formats.
+    ids: [archive]
+    homepage: "https://github.com/juan7732/ergo"
+    # Metadata follows the README's framing rather than the older "VS Code
+    # workspace manager" one-liner still carried by the Homebrew formula.
+    short_description: "Agentic context orchestration: git repositories and folders as a declarative context primitive for coding agents and the humans who work with them"
+    description: |
+      ergo lets you declare which repositories, docs, and working folders make
+      up a system, then materializes that declaration into a multi-repo
+      workspace: cloned, organized, kept in sync, and readable by both VS Code
+      and terminal coding agents. One TOML file is the single source of truth;
+      everything on disk is derived from it and can be rebuilt at any time.
+      Requires git on PATH; gh (GitHub CLI) for ergo update and the code CLI
+      for ergo open and ergo edit are optional.
+    license: "MIT"
+    license_url: "https://github.com/juan7732/ergo/blob/main/LICENSE"
+    release_notes_url: "https://github.com/juan7732/ergo/releases/tag/{{ .Tag }}"
+    tags:
+      - cli
+      - git
+      - workspace
+      - monorepo
+      - multi-repo
+      - coding-agents
+      - developer-tools
+    # Mirrors release.prerelease: auto. A pre-release tag (v1.0.0-rc1) still
+    # publishes the GitHub release but must not open a winget-pkgs PR.
+    skip_upload: auto
+    repository:
+      # goreleaser commits the manifests to a branch on the fork, then opens a
+      # PR from the fork into microsoft/winget-pkgs. The default GITHUB_TOKEN
+      # cannot write to the fork or open that PR, so the release workflow
+      # supplies a PAT (same pattern as HOMEBREW_TAP_TOKEN).
+      owner: juan7732
+      name: winget-pkgs
+      branch: "ergo-{{ .Version }}"
+      token: "{{ .Env.WINGET_PKGS_TOKEN }}"
+      pull_request:
+        enabled: true
+        draft: false
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master

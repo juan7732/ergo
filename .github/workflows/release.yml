@@ -38,3 +38,8 @@ jobs:
           # commit the formula to that separate repo (the default GITHUB_TOKEN
           # is scoped to this repo only).
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Classic PAT (public_repo scope) that can push a branch to the
+          # juan7732/winget-pkgs fork and open the pull request into
+          # microsoft/winget-pkgs. Fine-grained tokens cannot open PRs on
+          # repositories outside their owner.
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}

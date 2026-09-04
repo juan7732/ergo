@@ -34,7 +34,7 @@ to see all targets. Highlights:
 | `just clean`            | Remove `bin/` and clear Go caches            |
 | `just release <tag>`    | `git tag <tag>` + push (goreleaser runs in CI) |
 | `just release-check`    | validate `.goreleaser.yaml`                  |
-| `just release-snapshot` | local matrix + formula build into `dist/`    |
+| `just release-snapshot` | local matrix + formula + winget manifests into `dist/` |
 | `just test`             | `go test ./...`                              |
 | `just test-v`           | verbose                                      |
 | `just test-race`        | with race detector                           |
@@ -77,9 +77,13 @@ The `integration` job builds the Docker image and runs the end-to-end suite.
    - emits per-platform raw binaries named `ergo-<goos>-<goarch>` (`.exe` on
      Windows) **and** archives (`.tar.gz` on Unix, `.zip` on Windows);
    - writes a single `checksums.txt`;
-   - creates the GitHub release with all assets; and
+   - creates the GitHub release with all assets;
    - commits the generated formula to
-     [`juan7732/homebrew-tap`](https://github.com/juan7732/homebrew-tap).
+     [`juan7732/homebrew-tap`](https://github.com/juan7732/homebrew-tap); and
+   - generates the winget manifests for `juan7732.ergo` from the Windows zips,
+     pushes them to a branch on the `juan7732/winget-pkgs` fork, and opens a
+     pull request into `microsoft/winget-pkgs` (see
+     [winget channel](#winget-channel)).
 
 The raw asset name `ergo-<goos>-<goarch>` matches the name `ergo update` derives
 from `runtime.GOOS`/`runtime.GOARCH`, and the manifest name `checksums.txt`
@@ -88,9 +92,61 @@ verifies its SHA-256 against `checksums.txt` before swapping. Keep
 [`.goreleaser.yaml`](../../ergo/.goreleaser.yaml) and
 [`cmd/update.go`](../../ergo/cmd/update.go) in sync.
 
-**Required secret:** `HOMEBREW_TAP_TOKEN` — a PAT with write access to
-`juan7732/homebrew-tap` (the default `GITHUB_TOKEN` is scoped to the `ergo` repo
-only and cannot push the formula commit to the separate tap repo).
+**Required secrets** (repository secrets on `juan7732/ergo`; the default
+`GITHUB_TOKEN` is scoped to the `ergo` repo only and cannot write to either
+external repository):
+
+| Secret               | What it must be able to do                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `HOMEBREW_TAP_TOKEN` | PAT with write access to `juan7732/homebrew-tap`, so the `brews` block can commit the formula.                        |
+| `WINGET_PKGS_TOKEN`  | **Classic** PAT with the `public_repo` scope. Pushes the manifest branch to the `juan7732/winget-pkgs` fork and opens the pull request into `microsoft/winget-pkgs`. A fine-grained token cannot open pull requests on repositories outside its owner, so it will not work here. |
+
+### winget channel
+
+Windows users get ergo through the community repository
+[`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs) as the
+package `juan7732.ergo`. The `winget:` block in
+[`.goreleaser.yaml`](../../ergo/.goreleaser.yaml) is purely additive: it reads
+the existing `ergo_<version>_windows_<arch>.zip` archives and emits a three-file
+manifest set (version, installer, default locale, schema 1.12.0) declaring a
+**portable** package with the command alias `ergo`:
+
+```
+manifests/j/juan7732/ergo/<version>/
+  juan7732.ergo.yaml                 # version
+  juan7732.ergo.installer.yaml       # InstallerType: zip, NestedInstallerType: portable,
+                                     # PortableCommandAlias: ergo, x64 + arm64 zips + SHA-256
+  juan7732.ergo.locale.en-US.yaml    # publisher, description, license, tags
+```
+
+On every tag goreleaser pushes those files to a branch `ergo-<version>` on the
+fork and opens a pull request against `microsoft/winget-pkgs`. That PR is not
+merged by ergo's pipeline: winget-pkgs runs its own validation and a human
+moderator approves it, after which it auto-merges. Pre-release tags publish a
+GitHub release but skip the winget PR (`skip_upload: auto`).
+
+One-time prerequisites, outside the repository:
+
+1. Fork `microsoft/winget-pkgs` as `juan7732/winget-pkgs`
+   (`gh repo fork microsoft/winget-pkgs --clone=false`). goreleaser syncs the
+   fork with upstream before pushing, but it cannot create it.
+2. Create the `WINGET_PKGS_TOKEN` secret (see the table above).
+
+**First submission.** A brand-new package gets more scrutiny than a version
+bump and can take days to merge. Until the first PR is merged,
+`winget install juan7732.ergo` does not work and the README must say so;
+[issue #6](https://github.com/juan7732/ergo/issues/6) tracks flipping the
+docs once it is live. If a moderator asks for manifest changes, edit the
+files on the fork branch by hand and push; goreleaser's next tag regenerates
+from `.goreleaser.yaml`, so fold any permanent change back into that block.
+
+**Known `just release-check` caveat.** goreleaser 2.16+ hard-deprecates the
+`brews` block this project deliberately keeps (see the `// DECISION` above it),
+and `goreleaser check` now exits 2 whenever a deprecated key is present, even
+though it reports the configuration as valid. Until the formula-vs-cask
+question is revisited, treat "configuration is valid, but uses deprecated
+properties" as a pass and anything else as a failure. `goreleaser release`
+itself only warns.
 
 ## Tests
 
@@ -186,12 +242,20 @@ The release is **tag-driven**: pushing a `v*` tag triggers
 [`release.yml`](../../ergo/.github/workflows/release.yml), which re-runs the
 race-enabled test suite and then GoReleaser cross-compiles the matrix,
 publishes the GitHub release (raw `ergo-<os>-<arch>` binaries, `.tar.gz`
-archives, and `checksums.txt`), and commits the updated formula to
-`juan7732/homebrew-tap`. Homebrew users then `brew upgrade ergo`;
-standalone-binary users run `ergo update`.
+archives, and `checksums.txt`), commits the updated formula to
+`juan7732/homebrew-tap`, and opens a winget manifest pull request against
+`microsoft/winget-pkgs`. Homebrew users then `brew upgrade ergo`;
+standalone-binary users run `ergo update`; winget users `winget upgrade ergo`
+once the PR has been moderated and merged.
 
 The version number comes **only** from the tag (embedded via ldflags) — there
 is no version constant to bump in code.
+
+The `cut-release` skill at
+[`.github/skills/cut-release/SKILL.md`](../.github/skills/cut-release/SKILL.md)
+automates this whole section: preflight, version selection, notes
+validation, tag + push, notes attachment, and verification. This document
+remains canonical; the skill defers to it.
 
 ### 1. Pick the version
 
@@ -225,9 +289,14 @@ just integration   # dockerized end-to-end suite
 Optionally dry-run the release pipeline itself (requires `goreleaser` on PATH):
 
 ```bash
-just release-check       # validate .goreleaser.yaml
-just release-snapshot    # build matrix + formula into dist/ without publishing
+just release-check       # validate .goreleaser.yaml (see the brews caveat under "winget channel")
+just release-snapshot    # build matrix + formula + winget manifests into dist/ without publishing
 ```
+
+After a snapshot, inspect `dist/winget/manifests/j/juan7732/ergo/<version>/`:
+the installer manifest must list x64 and arm64 entries pointing at the
+`ergo_<version>_windows_<arch>.zip` release URLs with `PortableCommandAlias:
+ergo`.
 
 ### 4. Tag from a clean, up-to-date main
 
@@ -257,6 +326,17 @@ gh release edit v0.3.0 --notes-file ergo-docs/release-notes/v0.3.0.md
   "Brew formula update for ergo version v0.3.0" commit).
 - **Upgrade path** — spot-check `brew upgrade ergo && ergo --version`, or
   `ergo update` from a previous standalone binary.
+- **winget**: the release job's summary links the pull request it opened
+  against `microsoft/winget-pkgs` (title `New version: juan7732.ergo <version>`);
+  or find it with
+  `gh pr list --repo microsoft/winget-pkgs --author juan7732 --search juan7732.ergo`.
+  Watch its labels: `Validation-Completed` means the manifests passed the
+  winget-pkgs pipeline; `Needs-Author-Feedback` means a moderator wants a
+  change (edit the `ergo-<version>` branch on the fork). It merges on its own
+  once labelled `Moderator-Approved`. Do not count the PR as done at tag time;
+  for the first submission expect days, not minutes. When it has merged,
+  `winget install juan7732.ergo` (or `winget upgrade ergo`) on a Windows
+  machine is the end-to-end check.
 
 ### If the release fails
 
@@ -266,3 +346,9 @@ gh release edit v0.3.0 --notes-file ergo-docs/release-notes/v0.3.0.md
   `just release v0.3.0`.
 - **Release already published**: never reuse or move the tag — Homebrew and
   `ergo update` have both seen the checksums. Cut a patch release instead.
+- **Only the winget step failed** (fork missing, token rejected, PR could
+  not be opened): the GitHub release and the Homebrew formula are already
+  correct; nothing needs re-tagging. Fix the prerequisite, then open the PR
+  by hand from the manifests goreleaser wrote (re-run `just release-snapshot`
+  at the tag, or copy them from the job log) onto an `ergo-<version>` branch
+  of the fork.

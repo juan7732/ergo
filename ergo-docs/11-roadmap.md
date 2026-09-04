@@ -24,21 +24,6 @@ direction and sequencing, and links there rather than duplicating.
 
 ## Theme 1 — Daily use
 
-### Now: `ergo search <query>`
-
-Answer "do I already have this repo in a workspace somewhere?" without
-grepping `~/.ergo/workspaces/*.toml` by hand. Matches repo names/URLs, folder
-names, and workspace names across all workspace TOMLs, and reports whether
-each hit is actually cloned/materialized on disk. Ships with `--json` from
-day one — search is itself a context-orchestration primitive (an agent asking
-"where does repo X live?" is Theme 2 in miniature).
-
-Implementation plan: [plans/ergo-search.md](plans/ergo-search.md).
-
-**Tenet check:** the pain recurs and grows with adoption (more workspaces →
-harder to answer by hand); reuses the existing config-loading loop and the
-established `--json` contract; one new verb, no new config.
-
 ### Now: non-interactive polish on `ergo add repo`
 
 Found while an agent dogfooded adding repos (2026-08-12): the
@@ -111,12 +96,6 @@ mechanics.
 declaration materializes the same system on any machine, now from any
 machine); safe by default (explicit pulls, never overwrite, private
 always); no daemon, no watcher; best-effort like the state cache.
-
-### Next: `winget` distribution channel
-
-Promised in the README's Windows install section. Closes the loop on
-first-class Windows support (release assets already build for
-windows/amd64 and windows/arm64).
 
 ---
 

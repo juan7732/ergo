@@ -31,10 +31,10 @@ release tag:
 release-check:
     goreleaser check
 
-# Local dry-run: build the full matrix + Homebrew formula into dist/ without
+# Local dry-run: build the full matrix, Homebrew formula, and winget manifests into dist/ without
 # publishing. Useful before cutting a tag. Requires goreleaser on PATH.
 release-snapshot:
-    HOMEBREW_TAP_TOKEN=dummy goreleaser release --snapshot --clean --skip=publish
+    HOMEBREW_TAP_TOKEN=dummy WINGET_PKGS_TOKEN=dummy goreleaser release --snapshot --clean --skip=publish
 
 # ─── Test ─────────────────────────────────────────────────────────────────────
 
