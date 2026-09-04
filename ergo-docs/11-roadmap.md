@@ -24,20 +24,6 @@ direction and sequencing, and links there rather than duplicating.
 
 ## Theme 1 — Daily use
 
-### Now: non-interactive polish on `ergo add repo`
-
-Found while an agent dogfooded adding repos (2026-08-12): the
-non-interactive shorthand `ergo add repo <url> --group=...` still emits the
-`sync workspace now? [y/N]` prompt even when stdin is not a TTY (the docs
-say the prompt is TTY-gated — verify whether the gate is actually applied on
-the shorthand path; this may be a bug, not a decision). It degrades safely
-(EOF → N), but agents end up defensively piping `</dev/null`. Fix the gate,
-and consider a `--sync` flag so intent fits in one call.
-
-**Tenet check:** optimize for the hands (and for agents' hands); the flag is
-one small commitment that removes a prompt round-trip from the most
-script-shaped command.
-
 ### Next: workspace config sync (the `.ergo` repo)
 
 Solves "which of my three machines has this workspace?" and cross-machine
@@ -109,15 +95,36 @@ context, `ergo run` fans work out across it, and the `.code-workspace` file
 is merely one *renderer* of the model. VS Code becomes one consumer among
 several, not the identity.
 
-### Now: positioning reframe
+### Now: positioning reframe (remaining surfaces)
 
-Rewrite the README lead and `00-overview.md` framing around context
-orchestration, with VS Code workspace management as the flagship application
-of it rather than the definition. Costs nothing in code; sets the direction
-publicly. Messaging beats mechanism here — adoption follows a clear story
-about *why this exists now*.
+Reframe every first-impression surface around agentic context
+orchestration, with VS Code workspace management as the flagship
+application rather than the definition. Messaging beats mechanism here;
+adoption follows a clear story about *why this exists now*.
 
-**Tenet check:** zero code, zero new commitments.
+Status: the README shipped in the new framing (2026-09-03). Remaining
+surfaces, added 2026-09-04:
+
+- **CLI help output** (`ergo --help`): the root `Short` still reads
+  "Multi-repo VS Code workspace manager" and the `Long` never mentions
+  agents or context. Rewrite both in `cmd/root.go` to lead with the
+  context-orchestration frame (the README hook is the source of truth for
+  wording). Sweep the per-command `Short`/`Long` strings for the same:
+  `show` should say it focuses context, not just "filters the view";
+  `run` fans work across the system; `search` answers "where does X
+  live". Help text is the tool describing itself; today it undersells
+  exactly the way the old README did.
+- **`00-overview.md` framing**: still opens with the pre-reframe
+  description.
+- **GitHub repo description** (`gh repo edit`): still the old wording;
+  proposed replacement already drafted, awaiting the user applying or
+  approving it.
+
+Graduates when all three land; help-text changes ride any release as an
+Improved entry.
+
+**Tenet check:** near-zero code (string changes only), zero new
+commitments; show your work applies to the tool's self-description too.
 
 ### Exploring: sandboxed agent runtime on ergo primitives
 

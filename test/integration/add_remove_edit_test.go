@@ -66,6 +66,63 @@ func TestAddFolder_NonInteractive(t *testing.T) {
 	assert.Contains(t, body, "git = true")
 }
 
+// TestAddRepo_PipedStdinAddsSilently pins the non-interactive contract of
+// the shorthand: with stdin a pipe or closed, the add succeeds, exits 0, and
+// never prints the sync prompt. The flag-absent default must keep this.
+func TestAddRepo_PipedStdinAddsSilently(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	wsDir := seedMaterializedWorkspace(t, h, "ws-add-quiet")
+	repo := h.SeedBareRepo("quiet", map[string]string{"q.txt": "1\n"})
+
+	// Closed stdin (/dev/null).
+	res := h.RunIn(wsDir, "add", "repo", repo, "--name=quiet")
+	res.AssertOK(t)
+	assert.Contains(t, res.Stdout, `added repo "quiet"`)
+	assert.NotContains(t, res.Combined, "sync workspace now?")
+	assert.False(t, harness.IsGitRepo(filepath.Join(wsDir, "quiet")), "flag absent + no terminal: no sync")
+
+	// Piped stdin with data on it: still no prompt, and the data is not
+	// mistaken for an answer.
+	res = h.RunWith(harness.RunOpts{Cwd: wsDir, Stdin: "y\n"}, "add", "folder", "piped-notes")
+	res.AssertOK(t)
+	assert.NotContains(t, res.Combined, "sync workspace now?")
+	assert.NoDirExists(t, filepath.Join(wsDir, "piped-notes"))
+}
+
+func TestAddRepo_SyncFlagClonesInOneStep(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	wsDir := seedMaterializedWorkspace(t, h, "ws-add-sync")
+	repo := h.SeedBareRepo("one-step", map[string]string{"o.txt": "1\n"})
+
+	res := h.RunIn(wsDir, "add", "repo", repo, "--group=core", "--sync")
+	res.AssertOK(t)
+	assert.Contains(t, res.Stdout, `added repo "one-step"`)
+	assert.NotContains(t, res.Combined, "sync workspace now?", "--sync never prompts")
+	assert.True(t, harness.IsGitRepo(filepath.Join(wsDir, "one-step")), "--sync clones the new repo")
+	// The sync ran unfiltered: the pre-existing base repo is untouched and
+	// still present, and the add's --group did not narrow anything.
+	assert.True(t, harness.IsGitRepo(filepath.Join(wsDir, "ws-add-sync-base")))
+
+	res = h.RunIn(wsDir, "add", "folder", "notes", "--sync")
+	res.AssertOK(t)
+	assert.DirExists(t, filepath.Join(wsDir, "notes"), "--sync creates the new folder")
+}
+
+func TestAddRepo_SyncFalseLeavesUncloned(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	wsDir := seedMaterializedWorkspace(t, h, "ws-add-nosync")
+	repo := h.SeedBareRepo("later", map[string]string{"l.txt": "1\n"})
+
+	res := h.RunIn(wsDir, "add", "repo", repo, "--sync=false")
+	res.AssertOK(t)
+	assert.Contains(t, h.ReadWorkspaceTOML("ws-add-nosync"), repo, "the TOML entry is written")
+	assert.NotContains(t, res.Combined, "sync workspace now?")
+	assert.NoDirExists(t, filepath.Join(wsDir, "later"), "--sync=false never syncs")
+}
+
 func TestRemoveRepo_TOMLOnly(t *testing.T) {
 	t.Parallel()
 	h := harness.New(t)

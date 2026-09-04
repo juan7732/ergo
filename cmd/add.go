@@ -30,7 +30,9 @@ var addRepoCmd = &cobra.Command{
 Examples:
   ergo add repo https://github.com/owner/repo.git
   ergo add repo https://github.com/owner/repo.git --tags=go,tools --group=tools
-  ergo add repo https://github.com/owner/utils.git --name=utils-personal`,
+  ergo add repo https://github.com/owner/utils.git --name=utils-personal
+  ergo add repo https://github.com/owner/repo.git --sync          # clone in the same step
+  ergo add repo https://github.com/owner/repo.git --sync=false    # never prompt, never sync`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAddRepo,
 }
@@ -42,7 +44,8 @@ var addFolderCmd = &cobra.Command{
 
 Examples:
   ergo add folder scratch
-  ergo add folder planning --git`,
+  ergo add folder planning --git
+  ergo add folder scratch --sync    # create it on disk in the same step`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAddFolder,
 }
@@ -53,6 +56,12 @@ func init() {
 	addRepoCmd.Flags().String("group", "", "Group name")
 
 	addFolderCmd.Flags().Bool("git", false, "Run git init when creating the folder")
+
+	// Three states: absent (prompt when stdin is a terminal), --sync (sync
+	// without asking), --sync=false (never ask, never sync). See afterAdd.
+	for _, c := range []*cobra.Command{addRepoCmd, addFolderCmd} {
+		c.Flags().Bool("sync", false, "Sync the workspace after adding (--sync=false: never prompt, never sync)")
+	}
 
 	addCmd.AddCommand(addRepoCmd)
 	addCmd.AddCommand(addFolderCmd)
@@ -150,7 +159,7 @@ func runAddRepo(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "added repo %q to workspace %q\n", effectiveName, name)
-	return promptSync(cmd, name)
+	return afterAdd(cmd, name)
 }
 
 func runAddFolder(cmd *cobra.Command, args []string) error {
@@ -178,7 +187,7 @@ func runAddFolder(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "added folder %q to workspace %q\n", folderName, name)
-	return promptSync(cmd, name)
+	return afterAdd(cmd, name)
 }
 
 // checkNameCollision returns an error if the given name already exists as a
@@ -200,6 +209,34 @@ func checkNameCollision(name string, cfg config.WorkspaceConfig) error {
 // stdinIsTerminal reports whether stdin is interactive. A package var so tests
 // can drive promptSync without a real TTY.
 var stdinIsTerminal = isTerminal
+
+// afterAdd decides what the shorthand subcommands do once the TOML is
+// written, from the three states of their --sync flag:
+//
+//	absent        prompt when stdin is a terminal, silently skip otherwise
+//	--sync        sync now, no prompt
+//	--sync=false  never prompt, never sync
+//
+// DECISION: the flag exists to carry intent, not to fix the gate. The gate
+// is correct for piped stdin; the prompt agents saw came from harnesses that
+// run commands on a pseudo-terminal whose input EOFs immediately, which no
+// stdin check can tell apart from a person. An explicit flag removes the
+// round-trip either way. Absent means exactly the pre-flag behavior, so
+// scripts that never pass it see no change.
+//
+// The sync runs through the same zero-value syncParams path promptSync uses,
+// for the reason given there: add-only flags such as --name must not leak
+// into the sync as filters.
+func afterAdd(cmd *cobra.Command, name string) error {
+	if !cmd.Flags().Changed("sync") {
+		return promptSync(cmd, name)
+	}
+	doSync, _ := cmd.Flags().GetBool("sync")
+	if !doSync {
+		return nil
+	}
+	return syncRunner(cmd, name, syncParams{})
+}
 
 // promptSync asks whether to sync the workspace now and does so if confirmed.
 // Only prompts when stdin is a terminal; silently skips otherwise.

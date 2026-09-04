@@ -185,17 +185,39 @@ Add a repo or folder to a workspace TOML.
 
 Three invocation modes:
 
-1. `ergo add` (no subcommand) — TUI form picks repo vs folder, collects fields,
+1. `ergo add` (no subcommand): TUI form picks repo vs folder, collects fields,
    warns on collision, writes TOML, then prompts to sync (if stdin is a TTY).
-2. `ergo add repo <url> [--name=...] [--tags=t1,t2] [--group=...]` —
+2. `ergo add repo <url> [--name=...] [--tags=t1,t2] [--group=...] [--sync]`:
    non-interactive shorthand.
-3. `ergo add folder <name> [--git]` — non-interactive shorthand.
+3. `ergo add folder <name> [--git] [--sync]`: non-interactive shorthand.
 
 Collision check is `checkNameCollision()` — name must not match any existing
 repo's effective name or folder name.
 
-After writing, calls `promptSync()` which reads y/N from stdin only if
-`isTerminal()` returns true.
+### After the add: the `--sync` flag
+
+The shorthand subcommands take a `--sync` flag with three states, resolved
+by `afterAdd()`:
+
+| Invocation                          | After the TOML is written                                        |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| flag absent                         | `sync workspace now? [y/N]` when stdin is a terminal; silent skip otherwise |
+| `--sync`                            | Sync immediately, no prompt (terminal or not)                    |
+| `--sync=false`                      | Never prompt, never sync                                         |
+
+The default is unchanged from earlier releases. The prompt is read from stdin
+only when `isTerminal()` reports a terminal; with piped or closed stdin the
+add succeeds silently. Some agent harnesses run commands on a pseudo-terminal
+whose input ends immediately: the gate truthfully sees a terminal, the prompt
+appears, and EOF takes the safe default (N). That is not detectable from the
+gate, which is why intent is a flag: pass `--sync` to clone in the same
+step, or `--sync=false` to make the command fully silent.
+
+The sync triggered by `--sync` (or by answering `y`) runs with zero-value
+parameters, never by replaying the add command's flags, so `--name`,
+`--group`, and `--tags` cannot leak into it as filters. The interactive TUI
+mode (`ergo add` with no subcommand) keeps its end-of-flow prompt; the flag
+is for the script-shaped forms only.
 
 ---
 
