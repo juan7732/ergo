@@ -78,6 +78,29 @@ Filterable workspace picker. Pre-fills the filter with the user's typed
 partial name. Real-time substring filtering as the user types. Used by
 `resolveWorkspaceName` whenever resolution returns multiple candidates.
 
+### `SearchSelect` ([`search_select.go`](../../ergo/internal/tui/search_select.go))
+
+Live-filter picker over the full search index, used by `ergo search` with no
+query. Built on the bubbles `list` component rather than a hand-rolled
+cursor: the list starts in its filtering state so the first keystroke narrows
+it (fzf-style), items paginate past 12 rows, and each item's `FilterValue()`
+is name + URL + workspace, the same fields the CLI query matches. The default
+fuzzy filter is a deliberate divergence from the CLI's substring match (a
+`// DECISION:` in source).
+
+Enter, Esc/Ctrl-C, and Up/Down are intercepted before the list sees them,
+because in filtering state the list would treat Esc as "clear filter" and
+Enter as "apply filter". `q` is a filter character, not a cancel key.
+`Result()` returns `(workspace.Hit, bool)`. The caller runs the program with
+`tea.WithOutput(os.Stderr)` so stdout stays free for the selected path.
+
+`HitLine` and `HitStateLabel` are exported rendering helpers shared with the
+`ergo search` table so the state vocabulary (`cloned`, `created`, `synced`
+and their absent forms) has one definition.
+
+Covered by `teatest` unit tests in `search_select_test.go` (typing narrows,
+Enter yields the hit, Esc and Ctrl-C cancel).
+
 ### `RenderRepoTable` / `ShortRepoLine` ([`repo_table.go`](../../ergo/internal/tui/repo_table.go))
 
 Pure rendering helpers (not Bubble Tea models). Used by `cmd/status.go` for

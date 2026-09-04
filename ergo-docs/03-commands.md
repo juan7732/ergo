@@ -314,16 +314,25 @@ follow-up.
 
 ---
 
-## `ergo search <query>`
+## `ergo search [query]`
 File: [`cmd/search.go`](../../ergo/cmd/search.go)
 
 Find repos, folders, and workspaces by name across **all** configured
 workspaces. Answers "do I already have this repo somewhere?" without grepping
 `~/.ergo/workspaces/*.toml` by hand.
 
-- Exactly one positional argument. Case-insensitive **substring** match (not
+| Invocation                      | Behavior                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `ergo search <query>`           | Table of hits (below)                                                    |
+| `ergo search <query> --json`    | Hits as a JSON document                                                  |
+| `ergo search` (stdin is a TTY)  | Live-filter picker over the full index; Enter prints the path, exit 0    |
+| `ergo search` (stdin not a TTY) | One-line usage error on stderr, exit 1; never renders, never blocks      |
+| `ergo search --json`            | Full index as a JSON document, `"query": ""`; never a picker             |
+
+- At most one positional argument. Case-insensitive **substring** match (not
   a glob) against repo effective names and URLs, folder names, and workspace
-  names. A blank query is rejected.
+  names. An explicitly blank query (`""`) is rejected; omitting it is what
+  selects the picker or the full index.
 - Global, like `ergo list`: no workspace resolution, no filter flags.
 - Reads only TOML files and directory entries. No git, no network.
 - Unreadable workspace TOMLs are skipped with a warning on stderr so a broken
@@ -352,6 +361,36 @@ name. `State` is kind-specific and mirrors checks that already exist:
 No hits prints `no matches for "<query>"` and exits 0: an empty result is a
 successful query, consistent with `list --json` and with status filters that
 match nothing. URL and path are reported in the JSON form only.
+
+### Interactive picker (`ergo search` with no query)
+
+The tenet-1 fallback: a missing argument opens a picker instead of failing.
+The full index loads once (`tui.SearchSelect`, a bubbles list); typing
+narrows it fzf-style with the list's fuzzy filter over the same fields the
+CLI query matches (name, URL, workspace). Each row is
+`<name>  <kind>  <workspace>  <state>` with the state vocabulary from the
+table above. Up/Down move, Enter selects, Esc or Ctrl-C cancels; `q` is an
+ordinary filter character.
+
+The contract that makes it a navigation verb:
+
+- The picker renders on **stderr** (`tea.WithOutput(os.Stderr)`). Stdout
+  carries exactly one line: the selection's absolute path. That path is the
+  projected location (the JSON `path` field), printed even when the target is
+  not on disk yet; a failing `cd` is honest feedback that it needs a sync.
+- Cancel prints `cancelled` on stderr, nothing on stdout, and exits 1 so
+  `&&` chains short-circuit.
+- The interactive gate checks **stdin** only. In `d=$(ergo search)` stdout is
+  a pipe while stdin and stderr are still the terminal, so gating on stdout
+  would break the wrapper. With stdin not a terminal (a pipe, `/dev/null`, a
+  CI job) the command fails fast with a usage line and never renders.
+
+```sh
+ergocd-search() { local d; d=$(ergo search) && cd "$d"; }
+```
+
+Always use the `&&` form, never `cd "$(ergo search)"`: on cancel the latter
+would run `cd ""`.
 
 ### `ergo search --json`
 
@@ -395,6 +434,11 @@ match nothing. URL and path are reported in the JSON form only.
   consumers never reimplement the workspace-root join.
 - No hits is `{"query": "...", "results": []}` with exit 0. Test emptiness
   with `jq -e '.results | length > 0'`.
+- With no query the document is the **full index**: every workspace, repo,
+  and folder across all workspaces, emitted with `"query": ""`. An empty
+  query matches everything, so `""` in the document means "unfiltered" rather
+  than "nothing was asked". Agents and the VS Code extension build a complete
+  picker from this one call. Never a picker, whatever stdin is.
 - Warnings for skipped workspaces go to stderr; stdout stays a single
   document.
 
@@ -582,7 +626,7 @@ schemas are documented in each command's section above:
 | `validate --all --json`| `{workspaces[<validate object>]}`                           |
 | `show --json`          | `{workspace, filter}` — filter is `{group?, tags?, name?}` or `null` |
 | `config [ws] --json`   | `{workspace, repos[{name, url, tags, group}], folders[{name, git}]}` |
-| `search <q> --json`    | `{query, results[{workspace, kind, name, path, ...}]}`; per kind: repo adds `url, group, tags, cloned`, folder adds `created`, workspace adds `synced` |
+| `search [q] --json`    | `{query, results[{workspace, kind, name, path, ...}]}`; per kind: repo adds `url, group, tags, cloned`, folder adds `created`, workspace adds `synced`; no query gives the full index with `query: ""` |
 
 ---
 

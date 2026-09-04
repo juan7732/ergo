@@ -80,6 +80,7 @@ ergo show all
 ergo config --json
 ergo status --json
 ergo search ergo --json   # which workspaces have this repo, and is it cloned?
+ergo search --json        # the whole index in one document
 ```
 
 Working with a terminal agent, the pattern is: `ergo open` (or `sync`) to
@@ -100,7 +101,7 @@ files (`CLAUDE.md`, `AGENTS.md`), code, and your notes folders are in scope.
 | `ergo remove [name]`   | Remove a repo or folder from the workspace                                |
 | `ergo edit [name]`     | Open the workspace TOML in VS Code (`--global` for `~/.ergo/config.toml`) |
 | `ergo list`            | List all configured workspaces (`--json`)                                 |
-| `ergo search <query>`  | Find repos, folders, and workspaces by name across all workspaces (`--json`) |
+| `ergo search [query]`  | Find repos, folders, and workspaces by name across all workspaces; interactive picker with no args (`--json`) |
 | `ergo show [group]`    | Filter the workspace view to a group/tag (`--json` to read the filter)    |
 | `ergo run -- <cmd>`    | Run a command across all (or filtered) repos                              |
 | `ergo validate [name]` | Validate a workspace TOML (`--json`)                                      |
@@ -228,6 +229,18 @@ ergocd() { cd "$(ergo open --print-dir "$@")"; }
 First-time clone progress is routed to stderr in this mode so stdout stays
 clean for command substitution.
 
+`ergo search` with no arguments opens a live-filter picker over every repo,
+folder, and workspace you have declared. The picker renders on stderr and
+Enter prints the selection's absolute path to stdout, so the same trick turns
+search into navigation:
+
+```sh
+ergocd-search() { local d; d=$(ergo search) && cd "$d"; }
+```
+
+Keep the `&&`: cancelling the picker exits non-zero and prints nothing, so
+the wrapper stays where it was instead of running `cd ""`.
+
 ## How it works
 
 ergo is a single Go binary with no daemon and no state beyond your TOML files
@@ -254,8 +267,6 @@ and design tenets) lives in [`ergo-docs/`](ergo-docs/00-overview.md).
 Tracked in [`ergo-docs/11-roadmap.md`](ergo-docs/11-roadmap.md). Not yet
 shipped; listed here so current capabilities above stay unambiguous:
 
-- **`ergo search <query>`**: find which workspaces reference a repo, folder,
-  or name, with on-disk state per hit.
 - **VS Code extension** ([ergo-vscode](https://github.com/juan7732/ergo-vscode)):
   sidebar and status-bar surface over ergo's JSON contract. In development,
   read-only milestone working; not yet published.

@@ -139,3 +139,25 @@ func TestSearch_WorktreeGitFileCountsAsCloned(t *testing.T) {
 	require.Len(t, hits, 1)
 	assert.True(t, hits[0].Exists)
 }
+
+// An empty query is the full index: every workspace, repo, and folder, in
+// the same order a non-empty query would list them. `ergo search --json`
+// with no query relies on this instead of a separate index path.
+func TestSearch_EmptyQueryReturnsEverything(t *testing.T) {
+	hits := Search("", fixtureWorkspaces(), t.TempDir())
+
+	var got []string
+	for _, h := range hits {
+		got = append(got, h.Workspace+"/"+string(h.Kind)+"/"+h.Name)
+	}
+	assert.Equal(t, []string{
+		"ergo-ecosystem/workspace/ergo-ecosystem",
+		"ergo-ecosystem/repo/corvo",
+		"platform/workspace/platform",
+		"platform/repo/billing",
+		"platform/repo/ergo",
+		"platform/repo/ergo-utils",
+		"platform/folder/ergo-notes",
+		"platform/folder/scratch",
+	}, got)
+}

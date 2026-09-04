@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/juan7732/ergo/internal/config"
@@ -15,13 +16,13 @@ import (
 )
 
 // isTerminal reports whether stdin is an interactive terminal.
-// Used to decide whether to show interactive prompts.
+// Used to decide whether to show interactive prompts and pickers.
+//
+// This is a real isatty check. The earlier ModeCharDevice test also
+// answered true for /dev/null (a character device), so `ergo search </dev/null`
+// tried to open a picker and `ergo add repo` prompted with nobody listening.
 func isTerminal() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	return term.IsTerminal(os.Stdin.Fd())
 }
 
 // currentDir returns the current working directory.

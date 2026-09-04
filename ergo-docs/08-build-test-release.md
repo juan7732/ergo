@@ -158,6 +158,7 @@ Unit tests live next to the code they test:
 | `internal/git`       | `git_test.go` — runner-based tests with fakes                                 |
 | `internal/vscode`    | `generate_test.go`, `diff_test.go` — golden-file generation, write-if-changed |
 | `internal/workspace` | `detect_test.go`, `resolve_test.go`, `filter_test.go`, `runner_test.go`       |
+| `internal/tui`       | `search_select_test.go`: `teatest`-driven picker flows (type, Enter, cancel)  |
 
 Patterns:
 

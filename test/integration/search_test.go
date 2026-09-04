@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -232,8 +233,68 @@ func TestSearch_ArgValidation(t *testing.T) {
 	t.Parallel()
 	h := harness.New(t)
 
-	h.Run("search").AssertFail(t)
 	h.Run("search", "a", "b").AssertFail(t)
 	h.Run("search", "").AssertFail(t)
 	h.Run("search", "   ").AssertFail(t)
+}
+
+// TestSearch_NoArgsWithoutTerminalFailsFast guards the navigation wrapper
+// `d=$(ergo search) && cd "$d"`: with stdin not a terminal the command must
+// fail with a usage line on stderr, print nothing on stdout, and never block
+// waiting for input or start rendering a picker. The `add repo` sync prompt
+// that leaked through to non-TTY callers is the cautionary tale.
+func TestSearch_NoArgsWithoutTerminalFailsFast(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	seedSearchFixtures(t, h)
+
+	// stdin closed (/dev/null).
+	res := h.RunWith(harness.RunOpts{Timeout: 10 * time.Second}, "search")
+	require.NoError(t, res.Err, "must not hang or time out")
+	res.AssertFail(t)
+	assert.Empty(t, res.Stdout, "nothing may reach stdout")
+	assert.Contains(t, res.Stderr, "usage: ergo search <query>")
+	assert.NotContains(t, res.Combined, "type to filter", "the picker must not render")
+
+	// stdin is a pipe with data on it, as in `echo ergo | ergo search`.
+	res = h.RunWith(harness.RunOpts{Stdin: "ergo\n", Timeout: 10 * time.Second}, "search")
+	require.NoError(t, res.Err)
+	res.AssertFail(t)
+	assert.Empty(t, res.Stdout)
+	assert.Contains(t, res.Stderr, "usage: ergo search <query>")
+}
+
+func TestSearchJSON_NoQueryReturnsFullIndex(t *testing.T) {
+	t.Parallel()
+	h := harness.New(t)
+	seedSearchFixtures(t, h)
+
+	res := h.Run("search", "--json")
+	res.AssertOK(t)
+	var doc searchDoc
+	mustParseJSON(t, res.Stdout, &doc)
+	assert.Equal(t, "", doc.Query, "an empty query means the full index")
+
+	// Every entry across the three fixture workspaces: alpha (workspace, 2
+	// repos), beta (workspace, repo, folder), ergo-lab (workspace, repo).
+	var keys []string
+	for _, r := range doc.Results {
+		keys = append(keys, r.Workspace+"/"+r.Kind+"/"+r.Name)
+	}
+	assert.Equal(t, []string{
+		"alpha/workspace/alpha",
+		"alpha/repo/ergo",
+		"alpha/repo/unrelated",
+		"beta/workspace/beta",
+		"beta/repo/ergo",
+		"beta/folder/ergo-notes",
+		"ergo-lab/workspace/ergo-lab",
+		"ergo-lab/repo/unrelated",
+	}, keys)
+
+	// Same document shape as a query: kind-specific fields present per kind.
+	byKey := doc.byKey()
+	require.NotNil(t, doc.Results[byKey["alpha/repo/ergo"]].Cloned)
+	require.NotNil(t, doc.Results[byKey["beta/folder/ergo-notes"]].Created)
+	require.NotNil(t, doc.Results[byKey["alpha/workspace/alpha"]].Synced)
 }

@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
@@ -15,7 +18,7 @@ import (
 )
 
 var searchCmd = &cobra.Command{
-	Use:   "search <query>",
+	Use:   "search [query]",
 	Short: "Find repos, folders, and workspaces by name across all workspaces",
 	Long: `Search every workspace TOML under ~/.ergo/workspaces/ for repos, folders,
 and workspaces whose name contains <query> (case-insensitive substring; repo
@@ -23,9 +26,15 @@ URLs are matched too). Each hit reports the workspace it belongs to, its kind,
 and whether it is actually on disk: cloned for repos, created for folders,
 synced for workspaces.
 
-Answers "do I already have this repo somewhere?" without grepping TOML files
-by hand. Reads only config files and directory entries: no git, no network.`,
-	Args: cobra.ExactArgs(1),
+With no query and a terminal on stdin, opens a live-filter picker over the
+full index. Enter prints the selection's absolute path to stdout (the picker
+itself renders on stderr), so it composes with cd:
+
+  d=$(ergo search) && cd "$d"
+
+--json with no query prints the full index. Reads only config files and
+directory entries: no git, no network.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runSearch,
 }
 
@@ -34,16 +43,36 @@ func init() {
 	rootCmd.AddCommand(searchCmd)
 }
 
+// errSearchCancelled is returned when the picker exits without a selection.
+var errSearchCancelled = errors.New("search cancelled")
+
+// searchPicker runs the interactive picker over hits. A package var so cmd
+// tests can exercise the stdout contract without a terminal.
+var searchPicker = runSearchPicker
+
 func runSearch(cmd *cobra.Command, args []string) error {
 	jsonOut, _ := cmd.Flags().GetBool("json")
-	query := args[0]
 
-	// DECISION: an empty or blank query is rejected rather than treated as
-	// "match everything". Substring matching would make "" match every entry,
-	// which is almost always an unset shell variable, not a request to dump
-	// all workspaces (that is what ergo list and ergo config are for).
-	if strings.TrimSpace(query) == "" {
-		return fmt.Errorf("search query must not be empty")
+	query := ""
+	if len(args) == 1 {
+		query = args[0]
+		// DECISION: an explicitly empty or blank argument is still rejected.
+		// Omitting the argument is a deliberate request (picker, or the full
+		// index with --json); passing "" is almost always an unset shell
+		// variable, and silently dumping everything would hide that bug.
+		if strings.TrimSpace(query) == "" {
+			return fmt.Errorf("search query must not be empty")
+		}
+	}
+
+	// No query and no --json means the interactive picker. The gate checks
+	// STDIN only: in the wrapper `d=$(ergo search) && cd "$d"` stdout is a
+	// pipe while stdin and stderr are still the terminal, so gating on
+	// stdout would break the flagship use. The check runs before any config
+	// is read so a piped invocation fails fast and never renders.
+	interactive := len(args) == 0 && !jsonOut
+	if interactive && !stdinIsTerminal() {
+		return fmt.Errorf("usage: ergo search <query> (the interactive picker needs a terminal on stdin; use --json for the full index)")
 	}
 
 	names, err := config.ListWorkspaceNames()
@@ -83,6 +112,28 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 
+	if interactive {
+		hit, ok, err := searchPicker(hits)
+		if err != nil {
+			return fmt.Errorf("running search picker: %w", err)
+		}
+		if !ok {
+			// DECISION: cancel exits 1 with nothing on stdout, so
+			// `d=$(ergo search) && cd "$d"` short-circuits instead of
+			// running `cd ""`. The note goes to stderr and cobra's own
+			// error line is silenced: a cancelled picker is not a fault.
+			fmt.Fprintln(cmd.ErrOrStderr(), "cancelled")
+			cmd.SilenceErrors = true
+			return errSearchCancelled
+		}
+		// DECISION: the path is printed even when the target is not on
+		// disk yet (uncloned repo, unsynced workspace). It is the projected
+		// location, exactly the JSON path field; a failing cd is honest
+		// feedback that the target needs a sync first.
+		fmt.Fprintln(out, hit.Path)
+		return nil
+	}
+
 	// DECISION: no hits is a successful query and exits 0, consistent with
 	// `ergo list --json` printing {"workspaces": []} and with status filters
 	// that match nothing. Scripts test emptiness with
@@ -115,7 +166,7 @@ func printSearchTable(out io.Writer, hits []workspace.Hit) {
 			h.Name,
 			h.Group,
 			strings.Join(h.Tags, ", "),
-			searchStateLabel(h),
+			tui.HitStateLabel(h),
 		})
 	}
 
@@ -164,24 +215,6 @@ func printSearchTable(out io.Writer, hits []workspace.Hit) {
 	fmt.Fprintln(out, tui.StyleTableBorder.Render(border("└", "┴", "┘")))
 }
 
-// searchStateLabel renders the kind-specific on-disk state, styled so
-// present and absent are distinguishable at a glance.
-func searchStateLabel(h workspace.Hit) string {
-	var present, absent string
-	switch h.Kind {
-	case workspace.HitKindRepo:
-		present, absent = "cloned", "uncloned"
-	case workspace.HitKindFolder:
-		present, absent = "created", "not created"
-	default:
-		present, absent = "synced", "not synced"
-	}
-	if h.Exists {
-		return tui.StyleSuccess.Render(present)
-	}
-	return tui.StyleSubtle.Render(absent)
-}
-
 // padCell right-pads s with spaces to the given visible width, measuring
 // with lipgloss.Width so ANSI escapes in styled cells do not count.
 func padCell(s string, width int) string {
@@ -189,4 +222,21 @@ func padCell(s string, width int) string {
 		return s + strings.Repeat(" ", pad)
 	}
 	return s
+}
+
+// runSearchPicker shows the live-filter picker on STDERR and returns the
+// chosen hit. Rendering on stderr keeps stdout reserved for the single path
+// line the caller prints, so command substitution captures only that.
+func runSearchPicker(hits []workspace.Hit) (workspace.Hit, bool, error) {
+	p := tea.NewProgram(tui.NewSearchSelect(hits), tea.WithOutput(os.Stderr))
+	final, err := p.Run()
+	if err != nil {
+		return workspace.Hit{}, false, err
+	}
+	m, ok := final.(tui.SearchSelect)
+	if !ok {
+		return workspace.Hit{}, false, fmt.Errorf("unexpected model %T", final)
+	}
+	hit, chosen := m.Result()
+	return hit, chosen, nil
 }
