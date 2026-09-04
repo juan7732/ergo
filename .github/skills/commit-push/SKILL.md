@@ -1,6 +1,6 @@
 ---
 name: commit-push
-description: 'Commit and push changes in the ergo repo. Use when the user asks to commit, push, ship, land, publish, or release changes. Runs the full pre-commit pipeline (tidy, fmt, vet, test-race), reviews staged diff, writes a conventional commit, and pushes to the current branch. Refuses to push to main without confirmation.'
+description: 'Commit and push changes in the ergo repo. Use when the user asks to commit, push, ship, or land changes. Runs the full pre-commit pipeline (tidy, fmt, vet, test-race), reviews staged diff, writes a conventional commit, and pushes to the current branch. Refuses to push to main without confirmation. For cutting a versioned release, use cut-release instead.'
 argument-hint: '[optional commit message]'
 ---
 
