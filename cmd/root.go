@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +18,16 @@ var rootCmd = &cobra.Command{
 
 // Execute adds all child commands to the root command and sets flags.
 // Called by main.main() with the version string embedded at build time.
+//
+// rootCmd.Execute already prints "Error: <msg>" to stderr for any RunE
+// failure, so only the exit code is handled here. Wrapping it in
+// cobra.CheckErr printed every error twice.
 func Execute(v string) {
 	version = v
 	rootCmd.Version = v
-	cobra.CheckErr(rootCmd.Execute())
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 
 func init() {
