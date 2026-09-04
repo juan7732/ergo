@@ -1,5 +1,5 @@
 // Package output defines the JSON documents emitted by the --json flag on
-// status, list, validate, and show.
+// status, list, validate, show, config, and search.
 //
 // These schemas are a stable wire contract consumed by external tooling (the
 // ergo VS Code extension pins its minimum ergo version against them). Field
@@ -242,4 +242,108 @@ func NewShow(workspaceName string, f *vscode.Filter) Show {
 		doc.Filter = &ShowFilter{Name: f.Name, Group: f.Group, Tags: f.Tags}
 	}
 	return doc
+}
+
+// ─── ergo search --json ───────────────────────────────────────────────────────
+
+// SearchResult is one hit in the search document. Kind ("repo", "folder",
+// or "workspace") discriminates the entry, and the wire shape varies by
+// kind: url, group, tags, and cloned appear only for repos; created only
+// for folders; synced only for workspaces. Fields that exist for a kind are
+// always emitted (tags is [] when unset, group is "" when unset). Path is
+// the absolute on-disk location whether or not it exists yet.
+//
+// DECISION: the per-kind shape is produced by MarshalJSON switching over
+// three unexported wire structs rather than by omitempty on pointer fields.
+// omitempty cannot express "tags: [] always present for repos, absent for
+// folders", and pointer-typed fields would push nil checks onto every Go
+// consumer for what is purely a wire concern.
+type SearchResult struct {
+	Workspace string
+	Kind      string
+	Name      string
+	URL       string
+	Group     string
+	Tags      []string
+	// Exists is the kind's on-disk bit: cloned for repos, created for
+	// folders, synced for workspaces.
+	Exists bool
+	Path   string
+}
+
+type searchRepoWire struct {
+	Workspace string   `json:"workspace"`
+	Kind      string   `json:"kind"`
+	Name      string   `json:"name"`
+	URL       string   `json:"url"`
+	Group     string   `json:"group"`
+	Tags      []string `json:"tags"`
+	Cloned    bool     `json:"cloned"`
+	Path      string   `json:"path"`
+}
+
+type searchFolderWire struct {
+	Workspace string `json:"workspace"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Created   bool   `json:"created"`
+	Path      string `json:"path"`
+}
+
+type searchWorkspaceWire struct {
+	Workspace string `json:"workspace"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Synced    bool   `json:"synced"`
+	Path      string `json:"path"`
+}
+
+// MarshalJSON renders the kind-specific wire shape documented on SearchResult.
+func (r SearchResult) MarshalJSON() ([]byte, error) {
+	switch r.Kind {
+	case string(workspace.HitKindRepo):
+		tags := r.Tags
+		if tags == nil {
+			tags = []string{}
+		}
+		return json.Marshal(searchRepoWire{
+			Workspace: r.Workspace, Kind: r.Kind, Name: r.Name,
+			URL: r.URL, Group: r.Group, Tags: tags, Cloned: r.Exists, Path: r.Path,
+		})
+	case string(workspace.HitKindFolder):
+		return json.Marshal(searchFolderWire{
+			Workspace: r.Workspace, Kind: r.Kind, Name: r.Name, Created: r.Exists, Path: r.Path,
+		})
+	case string(workspace.HitKindWorkspace):
+		return json.Marshal(searchWorkspaceWire{
+			Workspace: r.Workspace, Kind: r.Kind, Name: r.Name, Synced: r.Exists, Path: r.Path,
+		})
+	}
+	return nil, fmt.Errorf("marshaling search result: unknown kind %q", r.Kind)
+}
+
+// Search is the document printed by `ergo search <query> --json`.
+// With no hits it is {"query": "...", "results": []}, exit 0.
+type Search struct {
+	Query   string         `json:"query"`
+	Results []SearchResult `json:"results"`
+}
+
+// NewSearch builds the search document from matcher hits, normalizing a nil
+// slice to [].
+func NewSearch(query string, hits []workspace.Hit) Search {
+	results := make([]SearchResult, 0, len(hits))
+	for _, h := range hits {
+		results = append(results, SearchResult{
+			Workspace: h.Workspace,
+			Kind:      string(h.Kind),
+			Name:      h.Name,
+			URL:       h.URL,
+			Group:     h.Group,
+			Tags:      h.Tags,
+			Exists:    h.Exists,
+			Path:      h.Path,
+		})
+	}
+	return Search{Query: query, Results: results}
 }

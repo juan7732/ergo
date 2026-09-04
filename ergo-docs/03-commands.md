@@ -314,6 +314,92 @@ follow-up.
 
 ---
 
+## `ergo search <query>`
+File: [`cmd/search.go`](../../ergo/cmd/search.go)
+
+Find repos, folders, and workspaces by name across **all** configured
+workspaces. Answers "do I already have this repo somewhere?" without grepping
+`~/.ergo/workspaces/*.toml` by hand.
+
+- Exactly one positional argument. Case-insensitive **substring** match (not
+  a glob) against repo effective names and URLs, folder names, and workspace
+  names. A blank query is rejected.
+- Global, like `ergo list`: no workspace resolution, no filter flags.
+- Reads only TOML files and directory entries. No git, no network.
+- Unreadable workspace TOMLs are skipped with a warning on stderr so a broken
+  workspace cannot hide hits in healthy ones.
+
+```
+┌────────────────┬───────────┬────────────────┬───────┬──────┬─────────────┐
+│ Workspace      │ Kind      │ Name           │ Group │ Tags │ State       │
+├────────────────┼───────────┼────────────────┼───────┼──────┼─────────────┤
+│ ergo-ecosystem │ workspace │ ergo-ecosystem │       │      │ synced      │
+│ ergo-ecosystem │ repo      │ ergo           │ core  │ go   │ cloned      │
+│ platform       │ repo      │ ergo           │       │      │ uncloned    │
+│ scratchpad     │ folder    │ ergo-notes     │       │      │ not created │
+└────────────────┴───────────┴────────────────┴───────┴──────┴─────────────┘
+```
+
+Rows are ordered by workspace name, then kind (workspace, repo, folder), then
+name. `State` is kind-specific and mirrors checks that already exist:
+
+| Kind        | Present       | Absent        | True when                                                  |
+| ----------- | ------------- | ------------- | ---------------------------------------------------------- |
+| `repo`      | `cloned`      | `uncloned`    | `<workspace_root>/<ws>/<name>/.git` exists (same as sync)  |
+| `folder`    | `created`     | `not created` | `<workspace_root>/<ws>/<name>` is a directory              |
+| `workspace` | `synced`      | `not synced`  | `<workspace_root>/<ws>` is a directory (same as `list`)    |
+
+No hits prints `no matches for "<query>"` and exits 0: an empty result is a
+successful query, consistent with `list --json` and with status filters that
+match nothing. URL and path are reported in the JSON form only.
+
+### `ergo search --json`
+
+```json
+{
+  "query": "ergo",
+  "results": [
+    {
+      "workspace": "ergo-ecosystem",
+      "kind": "repo",
+      "name": "ergo",
+      "url": "https://github.com/juan7732/ergo.git",
+      "group": "core",
+      "tags": ["go"],
+      "cloned": true,
+      "path": "/Users/me/ergo-workspaces/ergo-ecosystem/ergo"
+    },
+    {
+      "workspace": "scratchpad",
+      "kind": "folder",
+      "name": "ergo-notes",
+      "created": false,
+      "path": "/Users/me/ergo-workspaces/scratchpad/ergo-notes"
+    },
+    {
+      "workspace": "ergo-ecosystem",
+      "kind": "workspace",
+      "name": "ergo-ecosystem",
+      "synced": true,
+      "path": "/Users/me/ergo-workspaces/ergo-ecosystem"
+    }
+  ]
+}
+```
+
+- `kind` discriminates the entry. Kind-specific fields are present only for
+  that kind: `url`, `group`, `tags`, `cloned` for repos; `created` for
+  folders; `synced` for workspaces. Fields that exist for a kind are always
+  emitted (`tags` is `[]` when unset, `group` is `""` when unset).
+- `path` is the absolute on-disk location whether or not it exists yet, so
+  consumers never reimplement the workspace-root join.
+- No hits is `{"query": "...", "results": []}` with exit 0. Test emptiness
+  with `jq -e '.results | length > 0'`.
+- Warnings for skipped workspaces go to stderr; stdout stays a single
+  document.
+
+---
+
 ## `ergo show [group | all]`
 File: [`cmd/show.go`](../../ergo/cmd/show.go)
 
@@ -461,7 +547,7 @@ embedded at build time via `-ldflags "-X main.version=..."` (defaults to `"dev"`
 
 ## JSON output contract
 
-`status`, `list`, `validate`, `show`, and `config` accept `--json`. This is the
+`status`, `list`, `validate`, `show`, `config`, and `search` accept `--json`. This is the
 machine-readable surface external tooling builds against — the ergo VS Code
 extension pins its minimum supported ergo version to the release that shipped
 it (`ergo-vscode-spec.md` §3).
@@ -496,6 +582,7 @@ schemas are documented in each command's section above:
 | `validate --all --json`| `{workspaces[<validate object>]}`                           |
 | `show --json`          | `{workspace, filter}` — filter is `{group?, tags?, name?}` or `null` |
 | `config [ws] --json`   | `{workspace, repos[{name, url, tags, group}], folders[{name, git}]}` |
+| `search <q> --json`    | `{query, results[{workspace, kind, name, path, ...}]}`; per kind: repo adds `url, group, tags, cloned`, folder adds `created`, workspace adds `synced` |
 
 ---
 

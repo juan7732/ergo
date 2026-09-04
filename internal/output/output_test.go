@@ -386,3 +386,109 @@ func assertErr(msg string) error { return errString(msg) }
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestMarshal_Search_Golden(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  Search
+		want string
+	}{
+		{
+			name: "one hit of each kind, kind-specific fields only",
+			doc: NewSearch("ergo", []workspace.Hit{
+				{
+					Workspace: "ergo-ecosystem", Kind: workspace.HitKindWorkspace, Name: "ergo-ecosystem",
+					Path: "/home/u/ergo-workspaces/ergo-ecosystem", Exists: true,
+				},
+				{
+					Workspace: "ml-projects", Kind: workspace.HitKindRepo, Name: "ergo",
+					URL: "https://github.com/juan7732/ergo.git", Group: "core", Tags: []string{"go"},
+					Path: "/home/u/ergo-workspaces/ml-projects/ergo", Exists: true,
+				},
+				{
+					Workspace: "scratchpad", Kind: workspace.HitKindFolder, Name: "ergo-notes",
+					Path: "/home/u/ergo-workspaces/scratchpad/ergo-notes", Exists: false,
+				},
+			}),
+			want: `{
+  "query": "ergo",
+  "results": [
+    {
+      "workspace": "ergo-ecosystem",
+      "kind": "workspace",
+      "name": "ergo-ecosystem",
+      "synced": true,
+      "path": "/home/u/ergo-workspaces/ergo-ecosystem"
+    },
+    {
+      "workspace": "ml-projects",
+      "kind": "repo",
+      "name": "ergo",
+      "url": "https://github.com/juan7732/ergo.git",
+      "group": "core",
+      "tags": [
+        "go"
+      ],
+      "cloned": true,
+      "path": "/home/u/ergo-workspaces/ml-projects/ergo"
+    },
+    {
+      "workspace": "scratchpad",
+      "kind": "folder",
+      "name": "ergo-notes",
+      "created": false,
+      "path": "/home/u/ergo-workspaces/scratchpad/ergo-notes"
+    }
+  ]
+}
+`,
+		},
+		{
+			name: "repo without group or tags: group empty string, tags []",
+			doc: NewSearch("utils", []workspace.Hit{
+				{
+					Workspace: "ws", Kind: workspace.HitKindRepo, Name: "utils",
+					URL: "https://github.com/o/utils.git", Path: "/w/ws/utils",
+				},
+			}),
+			want: `{
+  "query": "utils",
+  "results": [
+    {
+      "workspace": "ws",
+      "kind": "repo",
+      "name": "utils",
+      "url": "https://github.com/o/utils.git",
+      "group": "",
+      "tags": [],
+      "cloned": false,
+      "path": "/w/ws/utils"
+    }
+  ]
+}
+`,
+		},
+		{
+			name: "no hits: results present and empty",
+			doc:  NewSearch("nope", nil),
+			want: `{
+  "query": "nope",
+  "results": []
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Marshal(tt.doc)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(got))
+		})
+	}
+}
+
+func TestMarshal_Search_UnknownKindErrors(t *testing.T) {
+	_, err := Marshal(Search{Query: "x", Results: []SearchResult{{Kind: "bogus"}}})
+	require.Error(t, err)
+}
