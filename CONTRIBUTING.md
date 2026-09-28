@@ -94,10 +94,8 @@ Open an issue with:
 
 ## Reporting security issues
 
-Do **not** open a public issue for security vulnerabilities. Email the
-maintainer directly (see commit history for contact) with details and a
-reproducer. We'll acknowledge within a reasonable window and coordinate
-disclosure.
+Do **not** open a public issue for security vulnerabilities. Use GitHub's
+private vulnerability reporting as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
