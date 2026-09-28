@@ -133,6 +133,10 @@ winget:
     publisher: juan7732
     publisher_url: "https://github.com/juan7732"
     publisher_support_url: "https://github.com/juan7732/ergo/issues"
+    # Required by winget-pkgs policy 1.5.1 for tools that touch authenticated
+    # data (ergo drives the user's git/gh). Product-specific page, per the
+    # defaultLocale schema's preference; keep in sync with PRIVACY.md.
+    privacy_url: "https://github.com/juan7732/ergo/blob/main/PRIVACY.md"
     # Only the zip archives: mixing the raw .exe binaries (archive id "binary")
     # in would make goreleaser reject the set as mixed formats.
     ids: [archive]
