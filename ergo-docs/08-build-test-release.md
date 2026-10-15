@@ -132,13 +132,14 @@ One-time prerequisites, outside the repository:
    fork with upstream before pushing, but it cannot create it.
 2. Create the `WINGET_PKGS_TOKEN` secret (see the table above).
 
-**First submission.** A brand-new package gets more scrutiny than a version
-bump and can take days to merge. Until the first PR is merged,
-`winget install juan7732.ergo` does not work and the README must say so;
-[issue #6](https://github.com/juan7732/ergo/issues/6) tracks flipping the
-docs once it is live. If a moderator asks for manifest changes, edit the
-files on the fork branch by hand and push; goreleaser's next tag regenerates
-from `.goreleaser.yaml`, so fold any permanent change back into that block.
+**Moderator requests.** The package has been live since the 0.5.0 manifests
+merged on 2026-10-15; version bumps get lighter review than that first
+submission did. If a moderator asks for manifest changes, edit the files on
+the fork branch by hand and push (any push reruns validation); goreleaser's
+next tag regenerates from `.goreleaser.yaml`, so fold any permanent change
+back into that block. `privacy_url` is there for that reason: winget-pkgs
+policy 1.5.1 requires a `PrivacyUrl` for tools that drive the user's git/gh
+authentication, and it must resolve at validation time.
 
 **Known `just release-check` caveat.** goreleaser 2.16+ hard-deprecates the
 `brews` block this project deliberately keeps (see the `// DECISION` above it),
@@ -334,7 +335,7 @@ gh release edit v0.3.0 --notes-file ergo-docs/release-notes/v0.3.0.md
   winget-pkgs pipeline; `Needs-Author-Feedback` means a moderator wants a
   change (edit the `ergo-<version>` branch on the fork). It merges on its own
   once labelled `Moderator-Approved`. Do not count the PR as done at tag time;
-  for the first submission expect days, not minutes. When it has merged,
+  moderation takes hours to days. When it has merged,
   `winget install juan7732.ergo` (or `winget upgrade ergo`) on a Windows
   machine is the end-to-end check.
 
